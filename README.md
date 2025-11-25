@@ -1,2 +1,199 @@
 # GLinux
-Logitech Ghub on Linux with dpi Feature, Macros and App Profiles.
+
+🎮 **Logitech G Hub alternative for Linux** - Configure DPI, lighting, macros, and application profiles for Logitech gaming peripherals.
+
+![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![GTK](https://img.shields.io/badge/GTK-4.0-green.svg)
+
+## Features
+
+- **DPI Settings**: Configure multiple DPI levels with individual colors
+- **RGB Lighting**: Control lighting effects (static, breathing, color cycle, wave)
+- **Macros**: Record and playback macro sequences with delays
+- **Profiles**: Multiple device profiles with application-specific switching
+- **Battery Status**: Monitor battery level and charging status
+- **Firmware**: View firmware version information
+
+## Supported Devices
+
+| Device | DPI | Lighting | Macros | Battery |
+|--------|-----|----------|--------|---------|
+| G502 Lightspeed | ✅ | ✅ | ✅ | ✅ |
+| G502 X Plus | ✅ | ✅ (8 zones) | ✅ | ✅ |
+| PRO DEX 2 | ✅ (44K max) | ⚠️ (limited) | ✅ | ✅ |
+
+## Installation
+
+### From Flatpak (Recommended)
+
+```bash
+# Install from Flathub (when available)
+flatpak install io.github.glinux
+
+# Or build locally
+cd packaging/flatpak
+flatpak-builder --install --user build io.github.glinux.yml
+```
+
+### Arch Linux (AUR)
+
+```bash
+# Using yay
+yay -S glinux
+
+# Or manually
+git clone https://aur.archlinux.org/glinux.git
+cd glinux
+makepkg -si
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/MrSchnirschuh/GLinux.git
+cd GLinux
+
+# Install dependencies (Arch Linux)
+sudo pacman -S python python-gobject python-pydantic gtk4 libadwaita hidapi
+
+# Install dependencies (Ubuntu/Debian)
+sudo apt install python3 python3-gi python3-pydantic gir1.2-gtk-4.0 gir1.2-adw-1 libhidapi-hidraw0
+
+# Install Python package
+pip install -e .
+
+# Run
+glinux
+```
+
+## udev Rules
+
+To allow non-root access to Logitech devices, install the udev rules:
+
+```bash
+sudo cp data/udev/99-glinux.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+## Usage
+
+### GUI Application
+
+Launch GLinux from your application menu or run:
+
+```bash
+glinux
+```
+
+### Features Overview
+
+#### DPI Settings
+- Configure up to 5 DPI levels (100-32000 DPI depending on device)
+- Assign colors to each DPI level for quick identification
+- Switch between levels using the DPI button on your mouse
+
+#### Lighting
+- Choose from multiple effects: Static, Breathing, Color Cycle, Wave
+- Adjust brightness and effect speed
+- G502 X Plus supports per-zone lighting control
+
+#### Macros
+- Record macros with keyboard and mouse actions
+- Set delays between actions
+- Configure repeat count or repeat-while-held
+- Assign macros to mouse buttons
+
+#### Application Profiles
+- Create profiles for specific applications (games, productivity tools)
+- Automatic profile switching when applications are launched
+- Different DPI, lighting, and macro settings per application
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/MrSchnirschuh/GLinux.git
+cd GLinux
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+### Code Style
+
+```bash
+# Lint
+ruff check src/ tests/
+
+# Type check
+mypy src/
+```
+
+### Project Structure
+
+```
+GLinux/
+├── src/glinux/
+│   ├── core/           # Core functionality
+│   │   ├── config.py   # Configuration management
+│   │   ├── device.py   # Device abstraction
+│   │   └── hid.py      # HID communication
+│   ├── devices/        # Device-specific implementations
+│   │   ├── g502.py     # G502 series support
+│   │   └── pro_dex.py  # PRO DEX 2 support
+│   ├── features/       # Feature modules
+│   │   ├── macros.py   # Macro system
+│   │   └── profiles.py # Profile management
+│   ├── gui/            # GTK4 GUI
+│   │   └── main_window.py
+│   └── main.py         # Application entry point
+├── data/               # Application data files
+├── packaging/          # Packaging configurations
+│   ├── flatpak/        # Flatpak manifest
+│   └── arch/           # Arch Linux PKGBUILD
+└── tests/              # Test suite
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Adding Device Support
+
+To add support for a new Logitech device:
+
+1. Create a new file in `src/glinux/devices/`
+2. Inherit from `BaseDevice` class
+3. Implement required methods
+4. Register the device in `DeviceManager`
+
+## License
+
+This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Inspired by [Solaar](https://github.com/pwr-Solaar/Solaar) and other Linux peripheral tools
+- Uses HID++ protocol information from various community sources
+- Built with GTK4 and libadwaita for a modern GNOME experience
