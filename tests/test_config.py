@@ -1,6 +1,5 @@
 """Tests for GLinux configuration module."""
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -12,7 +11,6 @@ from glinux.core.config import (
     DeviceProfile,
     DPILevel,
     DPISettings,
-    GlobalConfig,
     LightingEffect,
     LightingSettings,
     Macro,

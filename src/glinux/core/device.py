@@ -4,7 +4,6 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 from .config import (
     AppConfig,
@@ -169,7 +168,7 @@ class BaseDevice(ABC):
             return False
         return self._set_dpi_settings(settings)
 
-    def _set_dpi_settings(self, settings: DPISettings) -> bool:
+    def _set_dpi_settings(self, settings: DPISettings) -> bool:  # noqa: ARG002
         """Implementation of DPI settings."""
         return False
 
@@ -183,7 +182,7 @@ class BaseDevice(ABC):
             return False
         return self._set_lighting_settings(settings)
 
-    def _set_lighting_settings(self, settings: LightingSettings) -> bool:
+    def _set_lighting_settings(self, settings: LightingSettings) -> bool:  # noqa: ARG002
         """Implementation of lighting settings."""
         return False
 

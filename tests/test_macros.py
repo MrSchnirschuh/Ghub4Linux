@@ -1,9 +1,6 @@
 """Tests for GLinux macro system."""
 
 import time
-from unittest.mock import MagicMock
-
-import pytest
 
 from glinux.core.config import Macro, MacroAction
 from glinux.features.macros import MacroManager, MacroPlayer, MacroRecorder

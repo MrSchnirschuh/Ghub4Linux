@@ -235,10 +235,7 @@ class ProfileSwitcher:
 
         # Pattern match (simple glob)
         pattern = exe_name.replace("*", ".*").replace("?", ".")
-        if re.match(pattern, process):
-            return True
-
-        return False
+        return bool(re.match(pattern, process))
 
     def add_app_profile(
         self, device_id: str, app_name: str, executable: str, profile_name: str

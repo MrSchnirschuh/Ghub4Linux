@@ -8,10 +8,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from ..core.config import AppConfig, DPILevel, DPISettings, LightingSettings, RGBColor
-from ..core.device import BaseDevice, DeviceCapability, DeviceManager
+from ..core.config import AppConfig, DPILevel, DPISettings, LightingSettings, RGBColor  # noqa: E402
+from ..core.device import BaseDevice, DeviceCapability, DeviceManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class DPIPanel(Gtk.Box):
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply DPI settings."""
         levels = []
-        for i, scale in enumerate(self.dpi_scales):
+        for _i, scale in enumerate(self.dpi_scales):
             dpi = int(scale.get_value())
             # Get current color (simplified)
             color = RGBColor(red=255, green=255, blue=255)
@@ -285,7 +285,6 @@ class LightingPanel(Gtk.Box):
 
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply lighting settings."""
-        from gi.repository import Gdk
 
         rgba = self.color_button.get_rgba()
         color = RGBColor(
@@ -831,7 +830,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         device_classes = [G502Lightspeed, G502XPlus]
 
-        for hid_dev, dev_cls in zip(demo_devices, device_classes):
+        for hid_dev, dev_cls in zip(demo_devices, device_classes, strict=True):
             device = dev_cls(hid_dev)
             device._info = device.get_device_info()
             self.device_manager._devices[hid_dev.device_id] = device

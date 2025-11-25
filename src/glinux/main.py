@@ -9,10 +9,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gio, Gtk  # noqa: E402
 
-from .core.config import AppConfig
-from .gui.main_window import MainWindow
+from .core.config import AppConfig  # noqa: E402
+from .gui.main_window import MainWindow  # noqa: E402
 
 # Setup logging
 logging.basicConfig(

@@ -127,7 +127,7 @@ class MacroPlayer:
         logger.debug(f"Macro action: {action.action_type} = {action.value}")
 
     def play_macro(
-        self, macro: Macro, blocking: bool = False, hold_key: bool = False
+        self, macro: Macro, blocking: bool = False, hold_key: bool = False  # noqa: ARG002
     ) -> str | None:
         """Play a macro.
 
@@ -177,7 +177,7 @@ class MacroPlayer:
                 if state.stop_event.is_set():
                     break
 
-                self._execute_action(action)
+                self._execute_action(action, state.stop_event)
                 state.current_action += 1
 
             state.repeat_count += 1
@@ -185,12 +185,16 @@ class MacroPlayer:
 
         state.is_running = False
 
-    def _execute_action(self, action: MacroAction) -> None:
+    def _execute_action(self, action: MacroAction, stop_event: Event | None = None) -> None:
         """Execute a single macro action."""
         if action.action_type == "delay":
             # Delay value is in milliseconds
             delay_ms = action.value if isinstance(action.value, int) else 0
-            time.sleep(delay_ms / 1000.0)
+            # Use stop_event.wait() for interruptible delays
+            if stop_event:
+                stop_event.wait(delay_ms / 1000.0)
+            else:
+                time.sleep(delay_ms / 1000.0)
         else:
             self._input_sender(action)
 
@@ -357,7 +361,7 @@ class MacroManager:
         """Stop a macro playback."""
         return self._player.stop_macro(playback_id)
 
-    def start_recording(self, device_id: str) -> None:
+    def start_recording(self, device_id: str) -> None:  # noqa: ARG002
         """Start recording a macro."""
         self._recorder.start_recording()
 

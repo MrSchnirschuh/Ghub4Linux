@@ -6,15 +6,12 @@ Supports:
 """
 
 import logging
-from typing import Any
 
 from ..core.config import (
     DeviceConfig,
-    DPILevel,
     DPISettings,
     LightingEffect,
     LightingSettings,
-    RGBColor,
 )
 from ..core.device import (
     BaseDevice,
@@ -25,9 +22,6 @@ from ..core.device import (
     DeviceType,
 )
 from ..core.hid import (
-    FEATURE_ADJUSTABLE_DPI,
-    FEATURE_BATTERY_STATUS,
-    FEATURE_RGB_EFFECTS,
     HIDDevice,
 )
 
