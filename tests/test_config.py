@@ -1,11 +1,11 @@
-"""Tests for GLinux configuration module."""
+"""Tests for ghub4linux configuration module."""
 
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from glinux.core.config import (
+from ghub4linux.core.config import (
     AppConfig,
     DeviceConfig,
     DeviceProfile,

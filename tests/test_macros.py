@@ -1,9 +1,9 @@
-"""Tests for GLinux macro system."""
+"""Tests for ghub4linux macro system."""
 
 import time
 
-from glinux.core.config import Macro, MacroAction
-from glinux.features.macros import MacroManager, MacroPlayer, MacroRecorder
+from ghub4linux.core.config import Macro, MacroAction
+from ghub4linux.features.macros import MacroManager, MacroPlayer, MacroRecorder
 
 
 class TestMacroPlayer:

@@ -1,1 +1,1 @@
-"""Tests package for GLinux."""
+"""Tests package for ghub4linux."""

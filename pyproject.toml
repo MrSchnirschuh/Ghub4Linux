@@ -3,15 +3,15 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "glinux"
+name = "ghub4linux"
 version = "0.1.0"
 description = "Logitech G Hub alternative for Linux - Configure DPI, lighting, macros, and profiles for Logitech gaming peripherals"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
 authors = [
-    {name = "GLinux Contributors"}
+    {name = "ghub4linux Contributors"}
 ]
-keywords = ["logitech", "gaming", "mouse", "dpi", "macros", "rgb", "lighting"]
+keywords = ["logitech", "gaming", "mouse", "dpi", "macros", "rgb", "lighting", "ghub"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: X11 Applications :: GTK",
@@ -40,10 +40,10 @@ dev = [
 ]
 
 [project.scripts]
-glinux = "glinux.main:main"
+ghub4linux = "ghub4linux.main:main"
 
 [project.gui-scripts]
-glinux-gui = "glinux.main:main"
+ghub4linux-gui = "ghub4linux.main:main"
 
 [project.urls]
 Homepage = "https://github.com/MrSchnirschuh/GLinux"

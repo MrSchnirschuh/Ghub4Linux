@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ghub4linux</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>ghub4linux</name>
+  <summary>Configure Logitech gaming peripherals on Linux</summary>
+  <description>
+    <p>
+      ghub4linux is a Linux alternative to Logitech G Hub for configuring 
+      Logitech gaming peripherals. It provides a modern GTK4/libadwaita 
+      interface for managing your devices.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>DPI settings with multiple levels and color indicators</li>
+      <li>RGB lighting effects and zone control</li>
+      <li>Macro recording and playback with sequences</li>
+      <li>Multiple device profiles</li>
+      <li>Application-specific profile switching</li>
+      <li>Battery status monitoring</li>
+      <li>Firmware information and updates</li>
+    </ul>
+    <p>Supported devices:</p>
+    <ul>
+      <li>G502 Lightspeed</li>
+      <li>G502 X Plus</li>
+      <li>PRO DEX 2 (PRO X Superlight 2 DEX)</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.ghub4linux.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main window with device settings</caption>
+      <image>https://raw.githubusercontent.com/MrSchnirschuh/GLinux/main/data/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/MrSchnirschuh/GLinux</url>
+  <url type="bugtracker">https://github.com/MrSchnirschuh/GLinux/issues</url>
+  <developer_name>ghub4linux Contributors</developer_name>
+  <update_contact>ghub4linux@example.com</update_contact>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2024-01-01">
+      <description>
+        <p>Initial release with support for:</p>
+        <ul>
+          <li>G502 Lightspeed</li>
+          <li>G502 X Plus</li>
+          <li>PRO DEX 2</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  <provides>
+    <binary>ghub4linux</binary>
+  </provides>
+</component>

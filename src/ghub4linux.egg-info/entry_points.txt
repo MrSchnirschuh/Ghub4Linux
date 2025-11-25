@@ -1,0 +1,5 @@
+[console_scripts]
+ghub4linux = ghub4linux.main:main
+
+[gui_scripts]
+ghub4linux-gui = ghub4linux.main:main

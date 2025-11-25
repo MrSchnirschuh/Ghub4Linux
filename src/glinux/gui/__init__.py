@@ -1,1 +1,0 @@
-"""GUI module for GLinux."""

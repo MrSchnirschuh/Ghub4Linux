@@ -1,9 +1,9 @@
-"""Tests for GLinux device module."""
+"""Tests for ghub4linux device module."""
 
 import pytest
 
-from glinux.core.config import DeviceConfig, DPISettings, LightingSettings
-from glinux.core.device import (
+from ghub4linux.core.config import DeviceConfig, DPISettings, LightingSettings
+from ghub4linux.core.device import (
     BaseDevice,
     BatteryStatus,
     ConnectionType,
@@ -12,7 +12,7 @@ from glinux.core.device import (
     DeviceManager,
     DeviceType,
 )
-from glinux.core.hid import HIDDevice
+from ghub4linux.core.hid import HIDDevice
 
 
 class MockDevice(BaseDevice):
@@ -128,7 +128,7 @@ class TestBaseDevice:
         assert len(settings.levels) > 0
 
         # Modify settings
-        from glinux.core.config import DPILevel
+        from ghub4linux.core.config import DPILevel
 
         new_settings = DPISettings(
             levels=[DPILevel(dpi=800), DPILevel(dpi=1600)],
@@ -169,7 +169,7 @@ class TestBaseDevice:
 
     def test_apply_profile(self, mock_hid_device):
         """Test applying a profile."""
-        from glinux.core.config import DeviceProfile
+        from ghub4linux.core.config import DeviceProfile
 
         config = DeviceConfig(
             device_id="test",
@@ -199,7 +199,7 @@ class TestDeviceManager:
 
     def test_register_device_class(self):
         """Test registering a device class."""
-        from glinux.core.config import AppConfig
+        from ghub4linux.core.config import AppConfig
 
         config = AppConfig()
         manager = DeviceManager(config)
@@ -211,7 +211,7 @@ class TestDeviceManager:
 
     def test_get_device(self, mock_hid_device):
         """Test getting a device by ID."""
-        from glinux.core.config import AppConfig
+        from ghub4linux.core.config import AppConfig
 
         config = AppConfig()
         manager = DeviceManager(config)
@@ -228,7 +228,7 @@ class TestDeviceManager:
 
     def test_get_all_devices(self, mock_hid_device):
         """Test getting all devices."""
-        from glinux.core.config import AppConfig
+        from ghub4linux.core.config import AppConfig
 
         config = AppConfig()
         manager = DeviceManager(config)
@@ -243,7 +243,7 @@ class TestDeviceManager:
 
     def test_remove_device(self, mock_hid_device):
         """Test removing a device."""
-        from glinux.core.config import AppConfig
+        from ghub4linux.core.config import AppConfig
 
         config = AppConfig()
         manager = DeviceManager(config)

@@ -1,6 +1,6 @@
-# Maintainer: GLinux Contributors
+# Maintainer: ghub4linux Contributors
 
-pkgname=glinux
+pkgname=ghub4linux
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Logitech G Hub alternative for Linux - Configure DPI, lighting, macros for Logitech gaming peripherals"
@@ -38,20 +38,20 @@ package() {
     python -m installer --destdir="$pkgdir" dist/*.whl
 
     # Install desktop file
-    install -Dm644 data/io.github.glinux.desktop \
-        "$pkgdir/usr/share/applications/io.github.glinux.desktop"
+    install -Dm644 data/io.github.ghub4linux.desktop \
+        "$pkgdir/usr/share/applications/io.github.ghub4linux.desktop"
     
     # Install metainfo
-    install -Dm644 data/io.github.glinux.metainfo.xml \
-        "$pkgdir/usr/share/metainfo/io.github.glinux.metainfo.xml"
+    install -Dm644 data/io.github.ghub4linux.metainfo.xml \
+        "$pkgdir/usr/share/metainfo/io.github.ghub4linux.metainfo.xml"
     
     # Install icon
-    install -Dm644 data/icons/hicolor/scalable/apps/io.github.glinux.svg \
-        "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.glinux.svg"
+    install -Dm644 data/icons/hicolor/scalable/apps/io.github.ghub4linux.svg \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.ghub4linux.svg"
     
     # Install udev rules for device access
-    install -Dm644 data/udev/99-glinux.rules \
-        "$pkgdir/usr/lib/udev/rules.d/99-glinux.rules"
+    install -Dm644 data/udev/99-ghub4linux.rules \
+        "$pkgdir/usr/lib/udev/rules.d/99-ghub4linux.rules"
     
     # Install license
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

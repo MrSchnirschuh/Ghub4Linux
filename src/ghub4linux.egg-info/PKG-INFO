@@ -1,3 +1,34 @@
+Metadata-Version: 2.4
+Name: ghub4linux
+Version: 0.1.0
+Summary: Logitech G Hub alternative for Linux - Configure DPI, lighting, macros, and profiles for Logitech gaming peripherals
+Author: ghub4linux Contributors
+License: GPL-3.0-or-later
+Project-URL: Homepage, https://github.com/MrSchnirschuh/GLinux
+Project-URL: Repository, https://github.com/MrSchnirschuh/GLinux
+Project-URL: Issues, https://github.com/MrSchnirschuh/GLinux/issues
+Keywords: logitech,gaming,mouse,dpi,macros,rgb,lighting,ghub
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: X11 Applications :: GTK
+Classifier: Intended Audience :: End Users/Desktop
+Classifier: License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: System :: Hardware
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: PyGObject>=3.42.0
+Requires-Dist: hidapi>=0.14.0
+Requires-Dist: pydantic>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+
 # ghub4linux
 
 🎮 **Logitech G Hub alternative for Linux** - Configure DPI, lighting, macros, and application profiles for Logitech gaming peripherals.

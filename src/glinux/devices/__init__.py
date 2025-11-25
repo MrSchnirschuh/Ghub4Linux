@@ -1,1 +1,0 @@
-"""Device drivers for GLinux."""
