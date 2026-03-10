@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghub4linux"
+version = "0.1.0"
+description = "Logitech Ghub on Linux with DPI Feature, Macros and App Profiles."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "PyGObject",
+    "pydantic",
+    "hidapi",
+]
+
+[project.scripts]
+ghub4linux = "ghub4linux.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
