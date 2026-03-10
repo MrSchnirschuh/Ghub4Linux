@@ -1,2 +1,0 @@
-[console_scripts]
-ghub4linux = ghub4linux.__main__:main
