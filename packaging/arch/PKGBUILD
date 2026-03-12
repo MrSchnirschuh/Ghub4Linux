@@ -1,0 +1,58 @@
+# Maintainer: ghub4linux Contributors
+
+pkgname=ghub4linux
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Logitech G Hub alternative for Linux - Configure DPI, lighting, macros for Logitech gaming peripherals"
+arch=('any')
+url="https://github.com/MrSchnirschuh/Ghub4Linux"
+license=('GPL3')
+depends=(
+    'python>=3.10'
+    'python-gobject'
+    'python-pydantic'
+    'python-hidapi'
+    'gtk4'
+    'libadwaita'
+    'hidapi'
+)
+makedepends=(
+    'python-build'
+    'python-installer'
+    'python-wheel'
+    'python-setuptools'
+)
+optdepends=(
+    'xdotool: Application profile switching on X11'
+)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/MrSchnirschuh/Ghub4Linux/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+
+    # Install desktop file
+    install -Dm644 data/com.github.mrschnirschuh.ghub4linux.desktop \
+        "$pkgdir/usr/share/applications/com.github.mrschnirschuh.ghub4linux.desktop"
+    
+    # Install metainfo
+    install -Dm644 data/com.github.mrschnirschuh.ghub4linux.metainfo.xml \
+        "$pkgdir/usr/share/metainfo/com.github.mrschnirschuh.ghub4linux.metainfo.xml"
+    
+    # Install icon
+    install -Dm644 data/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg"
+    
+    # Install udev rules for device access
+    install -Dm644 data/udev/99-ghub4linux.rules \
+        "$pkgdir/usr/lib/udev/rules.d/99-ghub4linux.rules"
+    
+    # Install license
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
