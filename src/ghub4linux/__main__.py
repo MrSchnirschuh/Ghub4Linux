@@ -1,6 +1,8 @@
-"""Entry point for ghub4linux – runnable as `ghub4linux` or `python -m ghub4linux`."""
+"""Allow running ghub4linux as a module: python -m ghub4linux."""
 
-from ghub4linux.main import main
+import sys
+
+from .main import main
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
