@@ -661,11 +661,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.device_manager = DeviceManager(config)
 
         # Register device classes
-        from ..devices.g502 import G502_DEVICES
-        from ..devices.pro_dex import PRO_DEX_2_DEVICES
+        from ..devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
+        from ..devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
 
         for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
             self.device_manager.register_device_class(pid, cls)
+
+        # Register hint-based entries for shared Lightspeed receiver PIDs
+        for pid, hint, cls in [*G502_RECEIVER_HINTS, *PRO_DEX_2_RECEIVER_HINTS]:
+            self.device_manager.register_device_class(pid, cls, hint)
 
         self.set_title("ghub4linux")
         self.set_default_size(1000, 700)
@@ -773,7 +777,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_content(outer_box)
 
     def _scan_devices(self) -> bool:
-        """Scan for connected devices."""
+        """Scan for connected devices and refresh the sidebar."""
         # Clear existing device list
         while True:
             row = self.device_list.get_row_at_index(0)
@@ -782,15 +786,16 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 break
 
-        # Scan for devices
+        # scan_devices() creates device objects and calls device.connect()
         devices = self.device_manager.scan_devices()
+        logger.info(f"Device scan complete: {len(devices)} new device(s) found")
 
         if not devices:
             # Add placeholder for demo/testing
             self._add_demo_devices()
         else:
             for device in devices:
-                device.connect()
+                logger.info(f"  {device.name}: {'connected' if device.is_connected else 'not connected'}")
                 row = DeviceRow(device)
                 self.device_list.append(row)
 

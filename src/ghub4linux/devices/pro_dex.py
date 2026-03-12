@@ -29,6 +29,11 @@ PRO_DEX_2_PID = 0x40A3  # Pro DEX 2 wireless
 PRO_DEX_2_WIRED_PID = 0x40A4  # Pro DEX 2 wired mode
 PRO_DEX_2_RECEIVER_PID = 0x40A5  # Pro DEX 2 receiver
 
+# Lightspeed receiver PIDs (shared across multiple Logitech mice)
+LIGHTSPEED_RECEIVER_PID_1 = 0xC539
+LIGHTSPEED_RECEIVER_PID_2 = 0xC53A
+LIGHTSPEED_RECEIVER_PID_3 = 0xC547
+
 
 class ProDex2(BaseDevice):
     """Pro DEX 2 (PRO X Superlight 2 DEX) device implementation."""
@@ -60,12 +65,17 @@ class ProDex2(BaseDevice):
         logger.info(f"Initialized {self._info.name}")
 
     def _query_features(self) -> None:
-        """Query HID++ feature indexes."""
-        if not self._connection:
-            return
-        # Use typical feature indexes
-        self._dpi_feature_index = 0x06
-        self._battery_feature_index = 0x07
+        """Query HID++ feature indexes via IRoot (0x0000) feature discovery.
+
+        Falls back to typical hardcoded indexes when the device does not
+        respond or is not connected.
+        """
+        from ..core.hid import FEATURE_ADJUSTABLE_DPI, FEATURE_BATTERY_STATUS
+
+        feature_map = self.discover_features()
+
+        self._dpi_feature_index = feature_map.get(FEATURE_ADJUSTABLE_DPI, 0x06)
+        self._battery_feature_index = feature_map.get(FEATURE_BATTERY_STATUS, 0x07)
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
@@ -191,3 +201,17 @@ PRO_DEX_2_DEVICES = {
     PRO_DEX_2_WIRED_PID: ProDex2,
     PRO_DEX_2_RECEIVER_PID: ProDex2,
 }
+
+# Hint-based entries for shared Lightspeed receiver PIDs.
+# Format: (product_id, product_string_hint, device_class).
+# The hint is matched as a case-insensitive substring of the HID product string
+# reported by the OS for the receiver device.
+PRO_DEX_2_RECEIVER_HINTS: list[tuple[int, str, type]] = [
+    (LIGHTSPEED_RECEIVER_PID_1, "pro x superlight", ProDex2),
+    (LIGHTSPEED_RECEIVER_PID_2, "pro x superlight", ProDex2),
+    (LIGHTSPEED_RECEIVER_PID_3, "pro x superlight", ProDex2),
+]
+
+# TODO: Add Logitech Powerplay mousepad support (PIDs not yet registered).
+# The Powerplay mousepad has its own USB product IDs and acts as a Lightspeed
+# receiver for the connected mouse while wirelessly charging it.
