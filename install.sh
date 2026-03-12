@@ -113,6 +113,6 @@ if [ -z "${VIRTUAL_ENV:-}" ] && ! $SYSTEM; then
         echo ""
         echo "   ⚠  ${BIN_DIR} is not in your PATH."
         echo "   Add the following line to your shell profile (~/.bashrc, ~/.zshrc, …):"
-        echo "     export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo "     export PATH=\"${BIN_DIR}:\$PATH\""
     fi
 fi
