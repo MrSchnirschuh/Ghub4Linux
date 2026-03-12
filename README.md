@@ -37,6 +37,14 @@ a terminal:
 ghub4linux
 ```
 
+> **Note:** If the `ghub4linux` command is not found after installation, add
+> `~/.local/bin` to your PATH by adding this line to your shell profile
+> (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, …):
+>
+> ```bash
+> export PATH="$HOME/.local/bin:$PATH"
+> ```
+
 ---
 
 ### Step-by-step: Arch Linux / CachyOS
@@ -54,19 +62,15 @@ git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
 ```
 
-#### 3. Create and activate a virtual environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate.fish   # fish shell
-# source .venv/bin/activate      # bash / zsh
-```
-
-#### 4. Install (package + desktop entry + icon)
+#### 3. Install (package + desktop entry + icon)
 
 ```bash
 bash install.sh
 ```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python -m venv` step is needed.
 
 ---
 
@@ -88,18 +92,15 @@ git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
 ```
 
-#### 3. Create and activate a virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-#### 4. Install (package + desktop entry + icon)
+#### 3. Install (package + desktop entry + icon)
 
 ```bash
 bash install.sh
 ```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python3 -m venv` step is needed.
 
 ---
 
