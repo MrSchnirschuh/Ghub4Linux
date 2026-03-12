@@ -4,6 +4,14 @@
 # Usage:
 #   bash install.sh          # installs for the current user (no root required)
 #   bash install.sh --system # installs system-wide (requires root / sudo)
+#
+# A dedicated Python virtual environment is created automatically so that the
+# install works on distributions that enforce PEP 668 (Arch Linux, Ubuntu 23.04+,
+# Fedora 38+, …) without requiring --break-system-packages.
+#
+# The venv is created with --system-site-packages so that system-provided GTK /
+# GObject bindings (e.g. python-gobject installed via pacman / apt) are visible
+# inside it.  Only the ghub4linux package itself is installed via pip.
 
 set -euo pipefail
 
@@ -27,10 +35,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if $SYSTEM; then
     APP_DIR="/usr/share/applications"
     ICON_DIR="/usr/share/icons/hicolor/scalable/apps"
+    VENV_DIR="/opt/ghub4linux/venv"
+    BIN_DIR="/usr/local/bin"
     INSTALL_CMD="sudo"
 else
     APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+    VENV_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ghub4linux/venv"
+    BIN_DIR="$HOME/.local/bin"
     INSTALL_CMD=""
 fi
 
@@ -39,19 +51,44 @@ ICON_SRC="$SCRIPT_DIR/data/icons/hicolor/scalable/apps/com.github.mrschnirschuh.
 
 # ── 1. Install Python package ──────────────────────────────────────────────────
 echo "==> Installing Python package …"
-$INSTALL_CMD pip install -e "$SCRIPT_DIR"
+if [ -n "${VIRTUAL_ENV:-}" ]; then
+    # User already activated a venv before running this script – install there.
+    python3 -m pip install "$SCRIPT_DIR"
+    INSTALLED_BIN="${VIRTUAL_ENV}/bin/ghub4linux"
+elif $SYSTEM; then
+    # System-wide: create a dedicated venv under /opt.
+    sudo python3 -m venv --system-site-packages "$VENV_DIR"
+    sudo "$VENV_DIR/bin/pip" install "$SCRIPT_DIR"
+    INSTALLED_BIN="$VENV_DIR/bin/ghub4linux"
+else
+    # User install: create a dedicated venv under ~/.local/share/ghub4linux/.
+    # --system-site-packages lets the venv use system GTK/GObject bindings.
+    mkdir -p "$(dirname "$VENV_DIR")"
+    python3 -m venv --system-site-packages "$VENV_DIR"
+    "$VENV_DIR/bin/pip" install "$SCRIPT_DIR"
+    INSTALLED_BIN="$VENV_DIR/bin/ghub4linux"
+fi
 
-# ── 2. Install desktop entry ───────────────────────────────────────────────────
+# ── 2. Expose the launcher on PATH ────────────────────────────────────────────
+# Skip this when the user ran the script from inside their own venv (the venv's
+# bin/ is already on PATH while the venv is active).
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo "==> Installing launcher to $BIN_DIR …"
+    $INSTALL_CMD mkdir -p "$BIN_DIR"
+    $INSTALL_CMD ln -sf "$INSTALLED_BIN" "$BIN_DIR/ghub4linux"
+fi
+
+# ── 3. Install desktop entry ───────────────────────────────────────────────────
 echo "==> Installing desktop entry to $APP_DIR …"
 $INSTALL_CMD mkdir -p "$APP_DIR"
 $INSTALL_CMD cp "$DESKTOP_SRC" "$APP_DIR/"
 
-# ── 3. Install icon ────────────────────────────────────────────────────────────
+# ── 4. Install icon ────────────────────────────────────────────────────────────
 echo "==> Installing icon to $ICON_DIR …"
 $INSTALL_CMD mkdir -p "$ICON_DIR"
 $INSTALL_CMD cp "$ICON_SRC" "$ICON_DIR/"
 
-# ── 4. Refresh desktop / icon cache ───────────────────────────────────────────
+# ── 5. Refresh desktop / icon cache ───────────────────────────────────────────
 if command -v update-desktop-database &>/dev/null; then
     echo "==> Updating desktop database …"
     $INSTALL_CMD update-desktop-database "$APP_DIR"
@@ -69,3 +106,13 @@ fi
 echo ""
 echo "✔  Ghub4Linux installed successfully!"
 echo "   You can now launch it from your application menu or by running: ghub4linux"
+
+# Warn if ~/.local/bin is not yet on PATH (common on fresh user accounts).
+if [ -z "${VIRTUAL_ENV:-}" ] && ! $SYSTEM; then
+    if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
+        echo ""
+        echo "   ⚠  ${BIN_DIR} is not in your PATH."
+        echo "   Add the following line to your shell profile (~/.bashrc, ~/.zshrc, …):"
+        echo "     export PATH=\"${BIN_DIR}:\$PATH\""
+    fi
+fi

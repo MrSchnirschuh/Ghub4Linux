@@ -18,10 +18,15 @@ application so it appears in your desktop environment's application menu
 ```bash
 git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
+```
 
-# Install system dependencies first (see below), then:
+Install system dependencies first (see the distribution-specific sections below), then run **one** of the following:
+
+```bash
 bash install.sh          # installs for the current user (no root needed)
-# or
+```
+
+```bash
 bash install.sh --system # installs system-wide (requires sudo)
 ```
 
@@ -31,6 +36,14 @@ a terminal:
 ```bash
 ghub4linux
 ```
+
+> **Note:** If the `ghub4linux` command is not found after installation, add
+> `~/.local/bin` to your PATH by adding this line to your shell profile
+> (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, …):
+>
+> ```bash
+> export PATH="$HOME/.local/bin:$PATH"
+> ```
 
 ---
 
@@ -49,19 +62,15 @@ git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
 ```
 
-#### 3. Create and activate a virtual environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate.fish   # fish shell
-# source .venv/bin/activate      # bash / zsh
-```
-
-#### 4. Install (package + desktop entry + icon)
+#### 3. Install (package + desktop entry + icon)
 
 ```bash
 bash install.sh
 ```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python -m venv` step is needed.
 
 ---
 
@@ -83,18 +92,15 @@ git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
 ```
 
-#### 3. Create and activate a virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-#### 4. Install (package + desktop entry + icon)
+#### 3. Install (package + desktop entry + icon)
 
 ```bash
 bash install.sh
 ```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python3 -m venv` step is needed.
 
 ---
 
