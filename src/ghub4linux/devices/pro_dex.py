@@ -80,8 +80,8 @@ class ProDex2(BaseDevice):
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
         return DeviceInfo(
-            name="PRO DEX 2",
-            model="PRO X Superlight 2 DEX",
+            name="PRO X SUPERLIGHT 2 DEX",
+            model="PRO X SUPERLIGHT 2 DEX",
             vendor_id=self.hid_device.vendor_id,
             product_id=self.hid_device.product_id,
             serial_number=self.hid_device.serial_number,
@@ -211,7 +211,3 @@ PRO_DEX_2_RECEIVER_HINTS: list[tuple[int, str, type]] = [
     (LIGHTSPEED_RECEIVER_PID_2, "pro x superlight", ProDex2),
     (LIGHTSPEED_RECEIVER_PID_3, "pro x superlight", ProDex2),
 ]
-
-# TODO: Add Logitech Powerplay mousepad support (PIDs not yet registered).
-# The Powerplay mousepad has its own USB product IDs and acts as a Lightspeed
-# receiver for the connected mouse while wirelessly charging it.

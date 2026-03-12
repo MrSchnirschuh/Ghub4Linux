@@ -23,6 +23,7 @@ class DeviceType(Enum):
     MOUSE = "mouse"
     KEYBOARD = "keyboard"
     HEADSET = "headset"
+    MOUSEPAD = "mousepad"
     UNKNOWN = "unknown"
 
 

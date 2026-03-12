@@ -96,6 +96,7 @@ class DPIPanel(Gtk.Box):
         max_dpi = device.info.max_dpi if device.info else 25600
 
         self.dpi_scales: list[Gtk.Scale] = []
+        self.color_buttons: list[Gtk.ColorButton] = []
 
         for i, level in enumerate(settings.levels):
             level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -119,6 +120,7 @@ class DPIPanel(Gtk.Box):
             rgba = self._rgb_to_rgba(color)
             color_btn = Gtk.ColorButton.new_with_rgba(rgba)
             color_btn.connect("color-set", self._on_color_changed, i)
+            self.color_buttons.append(color_btn)
             level_box.append(color_btn)
 
             self.append(level_box)
@@ -172,10 +174,14 @@ class DPIPanel(Gtk.Box):
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply DPI settings."""
         levels = []
-        for _i, scale in enumerate(self.dpi_scales):
+        for scale, color_btn in zip(self.dpi_scales, self.color_buttons):
             dpi = int(scale.get_value())
-            # Get current color (simplified)
-            color = RGBColor(red=255, green=255, blue=255)
+            rgba = color_btn.get_rgba()
+            color = RGBColor(
+                red=int(rgba.red * 255),
+                green=int(rgba.green * 255),
+                blue=int(rgba.blue * 255),
+            )
             levels.append(DPILevel(dpi=dpi, color=color))
 
         settings = DPISettings(
@@ -184,9 +190,18 @@ class DPIPanel(Gtk.Box):
             default_dpi=levels[0].dpi if levels else 800,
         )
 
+        root = self.get_root()
         if self.device.set_dpi_settings(settings):
+            # Persist the updated profile to disk
+            if hasattr(root, "config"):
+                root.config.set_device_config(self.device.device_id, self.device.config)
+                root.config.save()
+            if hasattr(root, "show_toast"):
+                root.show_toast("DPI settings applied")
             logger.info("DPI settings applied")
         else:
+            if hasattr(root, "show_toast"):
+                root.show_toast("Failed to apply DPI settings")
             logger.error("Failed to apply DPI settings")
 
 
@@ -307,9 +322,18 @@ class LightingPanel(Gtk.Box):
 
         settings = LightingSettings(enabled=self.enable_switch.get_active(), effect=effect)
 
+        root = self.get_root()
         if self.device.set_lighting_settings(settings):
+            # Persist the updated profile to disk
+            if hasattr(root, "config"):
+                root.config.set_device_config(self.device.device_id, self.device.config)
+                root.config.save()
+            if hasattr(root, "show_toast"):
+                root.show_toast("Lighting settings applied")
             logger.info("Lighting settings applied")
         else:
+            if hasattr(root, "show_toast"):
+                root.show_toast("Failed to apply lighting settings")
             logger.error("Failed to apply lighting settings")
 
 
@@ -379,20 +403,125 @@ class MacroPanel(Gtk.Box):
 
         self.append(btn_box)
 
+    def _refresh_macro_list(self) -> None:
+        """Clear and repopulate the macro list from the active profile."""
+        while True:
+            row = self.macro_list.get_row_at_index(0)
+            if row:
+                self.macro_list.remove(row)
+            else:
+                break
+
+        profile = self.device.active_profile
+        for macro in profile.macros:
+            row = Gtk.ListBoxRow()
+            label = Gtk.Label(label=macro.name)
+            label.set_margin_top(12)
+            label.set_margin_bottom(12)
+            label.set_margin_start(12)
+            row.set_child(label)
+            self.macro_list.append(row)
+
+        if not profile.macros:
+            placeholder_row = Gtk.ListBoxRow()
+            placeholder_row.set_selectable(False)
+            placeholder = Gtk.Label(label="No macros defined")
+            placeholder.add_css_class("dim-label")
+            placeholder.set_margin_top(24)
+            placeholder.set_margin_bottom(24)
+            placeholder_row.set_child(placeholder)
+            self.macro_list.append(placeholder_row)
+
+    def _get_selected_macro(self) -> tuple[int, Any] | None:
+        """Return (index, macro) for the currently selected macro row, or None."""
+        row = self.macro_list.get_selected_row()
+        if row is None:
+            return None
+        index = row.get_index()
+        macros = self.device.active_profile.macros
+        if index < 0 or index >= len(macros):
+            return None
+        return index, macros[index]
+
     def _on_record(self, _button: Gtk.Button) -> None:
         """Start recording a macro."""
-        logger.info("Start macro recording")
-        # TODO: Implement macro recording dialog
+        dialog = Adw.MessageDialog(
+            transient_for=self.get_root(),
+            heading="New Macro",
+            body="Enter a name for the new macro:",
+        )
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("Macro name")
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_default_response("create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect("response", self._on_record_response, entry)
+        dialog.present()
+
+    def _on_record_response(
+        self,
+        dialog: Adw.MessageDialog,
+        response_id: str,
+        entry: Gtk.Entry,
+    ) -> None:
+        """Handle record macro dialog response."""
+        if response_id == "create":
+            name = entry.get_text().strip()
+            if name:
+                from ..core.config import Macro
+
+                macro = Macro(name=name, actions=[])
+                self.device.active_profile.macros.append(macro)
+                self._refresh_macro_list()
+        dialog.destroy()
 
     def _on_edit(self, _button: Gtk.Button) -> None:
         """Edit selected macro."""
-        logger.info("Edit macro")
-        # TODO: Implement macro editor
+        selected = self._get_selected_macro()
+        if selected is None:
+            return
+        index, macro = selected
+
+        dialog = Adw.MessageDialog(
+            transient_for=self.get_root(),
+            heading="Edit Macro",
+            body="Enter a new name for the macro:",
+        )
+        entry = Gtk.Entry()
+        entry.set_text(macro.name)
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("save", "Save")
+        dialog.set_default_response("save")
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect("response", self._on_edit_response, entry, index)
+        dialog.present()
+
+    def _on_edit_response(
+        self,
+        dialog: Adw.MessageDialog,
+        response_id: str,
+        entry: Gtk.Entry,
+        index: int,
+    ) -> None:
+        """Handle edit macro dialog response."""
+        if response_id == "save":
+            name = entry.get_text().strip()
+            if name:
+                self.device.active_profile.macros[index].name = name
+                self._refresh_macro_list()
+        dialog.destroy()
 
     def _on_delete(self, _button: Gtk.Button) -> None:
         """Delete selected macro."""
-        logger.info("Delete macro")
-        # TODO: Implement deletion
+        selected = self._get_selected_macro()
+        if selected is None:
+            return
+        index, _macro = selected
+        del self.device.active_profile.macros[index]
+        self._refresh_macro_list()
 
 
 class ProfilePanel(Gtk.Box):
@@ -662,13 +791,18 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Register device classes
         from ..devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
+        from ..devices.powerplay import POWERPLAY_RECEIVER_HINTS
         from ..devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
 
         for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
             self.device_manager.register_device_class(pid, cls)
 
         # Register hint-based entries for shared Lightspeed receiver PIDs
-        for pid, hint, cls in [*G502_RECEIVER_HINTS, *PRO_DEX_2_RECEIVER_HINTS]:
+        for pid, hint, cls in [
+            *G502_RECEIVER_HINTS,
+            *PRO_DEX_2_RECEIVER_HINTS,
+            *POWERPLAY_RECEIVER_HINTS,
+        ]:
             self.device_manager.register_device_class(pid, cls, hint)
 
         self.set_title("ghub4linux")
@@ -774,7 +908,15 @@ class MainWindow(Adw.ApplicationWindow):
         outer_box.append(header)
         outer_box.append(main_box)
 
-        self.set_content(outer_box)
+        # Wrap everything in a ToastOverlay for notifications
+        self.toast_overlay = Adw.ToastOverlay()
+        self.toast_overlay.set_child(outer_box)
+        self.set_content(self.toast_overlay)
+
+    def show_toast(self, message: str) -> None:
+        """Display a brief notification toast."""
+        toast = Adw.Toast(title=message)
+        self.toast_overlay.add_toast(toast)
 
     def _scan_devices(self) -> bool:
         """Scan for connected devices and refresh the sidebar."""
@@ -829,11 +971,23 @@ class MainWindow(Adw.ApplicationWindow):
                 usage_page=0xFF00,
                 usage=0x0001,
             ),
+            HIDDevice(
+                vendor_id=0x046D,
+                product_id=0xC53A,
+                serial_number="demo003",
+                manufacturer="Logitech",
+                product="Powerplay Wireless Charging System",
+                path=b"/dev/demo3",
+                interface_number=0,
+                usage_page=0xFF00,
+                usage=0x0001,
+            ),
         ]
 
         from ..devices.g502 import G502Lightspeed, G502XPlus
+        from ..devices.powerplay import Powerplay
 
-        device_classes = [G502Lightspeed, G502XPlus]
+        device_classes = [G502Lightspeed, G502XPlus, Powerplay]
 
         for hid_dev, dev_cls in zip(demo_devices, device_classes, strict=True):
             device = dev_cls(hid_dev)
