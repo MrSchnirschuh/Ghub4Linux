@@ -81,7 +81,15 @@ fi
 # ── 3. Install desktop entry ───────────────────────────────────────────────────
 echo "==> Installing desktop entry to $APP_DIR …"
 $INSTALL_CMD mkdir -p "$APP_DIR"
-$INSTALL_CMD cp "$DESKTOP_SRC" "$APP_DIR/"
+DESKTOP_DEST="$APP_DIR/$(basename "$DESKTOP_SRC")"
+$INSTALL_CMD cp "$DESKTOP_SRC" "$DESKTOP_DEST"
+# Patch Exec= to use the full absolute path so desktop environments (GNOME, KDE, …)
+# can launch the app without inheriting the user's shell PATH.
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    $INSTALL_CMD sed -i "s|^Exec=ghub4linux|Exec=${BIN_DIR}/ghub4linux|" "$DESKTOP_DEST"
+else
+    $INSTALL_CMD sed -i "s|^Exec=ghub4linux|Exec=${INSTALLED_BIN}|" "$DESKTOP_DEST"
+fi
 
 # ── 4. Install icon ────────────────────────────────────────────────────────────
 echo "==> Installing icon to $ICON_DIR …"

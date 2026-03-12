@@ -12,7 +12,7 @@ from .config import (
     DPISettings,
     LightingSettings,
 )
-from .hid import HIDConnection, HIDDevice, HIDManager
+from .hid import HIDConnection, HIDDevice, HIDManager, HIDError
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,11 @@ class BaseDevice(ABC):
         """Check if device has a capability."""
         return capability in self._capabilities
 
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the device has an open HID connection."""
+        return self._connection is not None
+
     def connect(self) -> bool:
         """Connect to the device."""
         try:
@@ -139,6 +144,52 @@ class BaseDevice(ABC):
         if self._connection:
             self._connection.close()
             self._connection = None
+
+    def discover_features(self) -> dict[int, int]:
+        """Discover HID++ 2.0 feature indexes by querying the device via IRoot (0x0000).
+
+        Sends a ``getFeature`` request (function 0, index 0x00) for each known
+        feature ID and records the returned feature index.  Returns a mapping
+        of ``feature_id -> feature_index`` for every feature that the device
+        reports as supported (non-zero index).
+        """
+        from .hid import (
+            FEATURE_ADJUSTABLE_DPI,
+            FEATURE_BATTERY_STATUS,
+            FEATURE_BATTERY_VOLTAGE,
+            FEATURE_LED_CONTROL,
+            FEATURE_ONBOARD_PROFILES,
+            FEATURE_REPORT_RATE,
+            FEATURE_RGB_EFFECTS,
+            FEATURE_UNIFIED_BATTERY,
+        )
+
+        feature_map: dict[int, int] = {}
+        if not self._connection:
+            return feature_map
+
+        features_to_discover = [
+            FEATURE_ADJUSTABLE_DPI,
+            FEATURE_BATTERY_STATUS,
+            FEATURE_BATTERY_VOLTAGE,
+            FEATURE_UNIFIED_BATTERY,
+            FEATURE_LED_CONTROL,
+            FEATURE_RGB_EFFECTS,
+            FEATURE_ONBOARD_PROFILES,
+            FEATURE_REPORT_RATE,
+        ]
+
+        for feature_id in features_to_discover:
+            try:
+                params = bytes([(feature_id >> 8) & 0xFF, feature_id & 0xFF])
+                response = self._connection.send_feature_request(0x00, 0x00, params)
+                # Byte 4 of the response contains the feature index (0 = not supported)
+                if response and len(response) >= 5 and response[4] != 0:
+                    feature_map[feature_id] = response[4]
+            except HIDError as e:
+                logger.debug(f"Feature discovery failed for {feature_id:#06x}: {e}")
+
+        return feature_map
 
     @abstractmethod
     def _init_device(self) -> None:
@@ -212,15 +263,35 @@ class DeviceManager:
         self._hid_manager = HIDManager()
         self._devices: dict[str, BaseDevice] = {}
         self._device_registry: dict[int, type[BaseDevice]] = {}
+        # Hint-based registry for PIDs shared across multiple devices (e.g.
+        # Lightspeed receivers).  Maps product_id -> [(product_hint, class), …].
+        # During scan, the device's product_string is matched against each hint
+        # (case-insensitive substring) to pick the correct class.
+        self._device_registry_hints: dict[int, list[tuple[str, type[BaseDevice]]]] = {}
 
     def register_device_class(
-        self, product_id: int, device_class: type[BaseDevice]
+        self,
+        product_id: int,
+        device_class: type[BaseDevice],
+        product_hint: str = "",
     ) -> None:
-        """Register a device class for a product ID."""
-        self._device_registry[product_id] = device_class
+        """Register a device class for a product ID.
+
+        When *product_hint* is provided the class is stored in the
+        hint-based registry: during :py:meth:`scan_devices` the hint is
+        matched as a case-insensitive substring of the HID product string.
+        Multiple classes may share the same *product_id* with different hints
+        (useful for shared Lightspeed receiver PIDs).
+        """
+        if product_hint:
+            self._device_registry_hints.setdefault(product_id, []).append(
+                (product_hint.lower(), device_class)
+            )
+        else:
+            self._device_registry[product_id] = device_class
 
     def scan_devices(self) -> list[BaseDevice]:
-        """Scan for connected devices."""
+        """Scan for connected devices and attempt to connect to new ones."""
         hid_devices = self._hid_manager.find_logitech_devices()
         new_devices = []
 
@@ -232,16 +303,32 @@ class DeviceManager:
             # Get or create device config
             device_config = self.app_config.get_device_config(device_id)
 
-            # Find appropriate device class
+            # Find appropriate device class – first try exact PID match, then
+            # fall back to product_string hints for shared receiver PIDs.
             device_class = self._device_registry.get(hid_device.product_id)
-            if device_class:
-                device = device_class(hid_device, device_config)
-            else:
-                # Skip unknown devices
+
+            if device_class is None and hid_device.product_id in self._device_registry_hints:
+                product_lower = (hid_device.product or "").lower()
+                for hint, cls in self._device_registry_hints[hid_device.product_id]:
+                    if hint in product_lower:
+                        device_class = cls
+                        break
+
+            if device_class is None:
                 continue
+
+            device = device_class(hid_device, device_config)
+            try:
+                device.connect()
+            except Exception as e:
+                logger.warning(f"Could not connect to {device.name}: {e}")
 
             self._devices[device_id] = device
             new_devices.append(device)
+            logger.info(
+                f"Found device: {device.name} (PID: {hid_device.product_id:#06x},"
+                f" connected: {device.is_connected})"
+            )
 
         return new_devices
 

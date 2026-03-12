@@ -34,6 +34,11 @@ G502_LIGHTSPEED_WIRED_PID = 0x407E  # G502 Lightspeed wired mode
 G502X_PLUS_PID = 0x4099  # G502X Plus
 G502X_PLUS_RECEIVER_PID = 0x409A  # G502X Plus receiver
 
+# Lightspeed receiver PIDs (shared across multiple Logitech mice)
+LIGHTSPEED_RECEIVER_PID_1 = 0xC539
+LIGHTSPEED_RECEIVER_PID_2 = 0xC53A
+LIGHTSPEED_RECEIVER_PID_3 = 0xC547
+
 
 class G502Device(BaseDevice):
     """Base class for G502 series devices."""
@@ -69,15 +74,22 @@ class G502Device(BaseDevice):
         logger.info(f"Initialized {self._info.name}")
 
     def _query_features(self) -> None:
-        """Query HID++ feature indexes."""
-        if not self._connection:
-            return
+        """Query HID++ feature indexes via IRoot (0x0000) feature discovery.
 
-        # In a real implementation, we would query the device for feature indexes
-        # For now, use typical indexes
-        self._dpi_feature_index = 0x06  # Typical for adjustable DPI
-        self._battery_feature_index = 0x07
-        self._rgb_feature_index = 0x08
+        Falls back to typical hardcoded indexes when the device does not
+        respond or is not connected.
+        """
+        from ..core.hid import (
+            FEATURE_ADJUSTABLE_DPI,
+            FEATURE_BATTERY_STATUS,
+            FEATURE_RGB_EFFECTS,
+        )
+
+        feature_map = self.discover_features()
+
+        self._dpi_feature_index = feature_map.get(FEATURE_ADJUSTABLE_DPI, 0x06)
+        self._battery_feature_index = feature_map.get(FEATURE_BATTERY_STATUS, 0x07)
+        self._rgb_feature_index = feature_map.get(FEATURE_RGB_EFFECTS, 0x08)
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
@@ -325,3 +337,13 @@ G502_DEVICES = {
     G502X_PLUS_PID: G502XPlus,
     G502X_PLUS_RECEIVER_PID: G502XPlus,
 }
+
+# Hint-based entries for shared Lightspeed receiver PIDs.
+# Format: (product_id, product_string_hint, device_class).
+# The hint is matched as a case-insensitive substring of the HID product string
+# reported by the OS for the receiver device.
+G502_RECEIVER_HINTS: list[tuple[int, str, type]] = [
+    (LIGHTSPEED_RECEIVER_PID_1, "g502", G502Lightspeed),
+    (LIGHTSPEED_RECEIVER_PID_2, "g502", G502Lightspeed),
+    (LIGHTSPEED_RECEIVER_PID_3, "g502", G502Lightspeed),
+]
