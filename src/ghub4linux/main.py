@@ -28,7 +28,7 @@ class Ghub4LinuxApplication(Adw.Application):
     def __init__(self):
         """Initialize the application."""
         super().__init__(
-            application_id="io.github.ghub4linux",
+            application_id="com.github.mrschnirschuh.ghub4linux",
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
         self.config = AppConfig.load()
@@ -125,8 +125,8 @@ class Ghub4LinuxApplication(Adw.Application):
             developers=["ghub4linux Contributors"],
             copyright="© 2024 ghub4linux Contributors",
             license_type=Gtk.License.GPL_3_0,
-            website="https://github.com/MrSchnirschuh/GLinux",
-            issue_url="https://github.com/MrSchnirschuh/GLinux/issues",
+            website="https://github.com/MrSchnirschuh/Ghub4Linux",
+            issue_url="https://github.com/MrSchnirschuh/Ghub4Linux/issues",
             comments="Configure your Logitech gaming peripherals on Linux.\n\n"
             "Supports DPI settings, RGB lighting, macros, and application profiles "
             "for G502 Lightspeed, G502X Plus, Pro DEX 2, and more.",

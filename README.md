@@ -1,199 +1,152 @@
-# ghub4linux
+# Ghub4Linux
 
-🎮 **Logitech G Hub alternative for Linux** - Configure DPI, lighting, macros, and application profiles for Logitech gaming peripherals.
+Logitech Ghub on Linux with DPI Feature, Macros and App Profiles.
 
-![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
-![GTK](https://img.shields.io/badge/GTK-4.0-green.svg)
+A GTK4/libadwaita application that lets you configure your Logitech mouse on Linux
+(DPI settings, macro key bindings, and per-application profiles).
 
-## Features
-
-- **DPI Settings**: Configure multiple DPI levels with individual colors
-- **RGB Lighting**: Control lighting effects (static, breathing, color cycle, wave)
-- **Macros**: Record and playback macro sequences with delays
-- **Profiles**: Multiple device profiles with application-specific switching
-- **Battery Status**: Monitor battery level and charging status
-- **Firmware**: View firmware version information
-
-## Supported Devices
-
-| Device | DPI | Lighting | Macros | Battery |
-|--------|-----|----------|--------|---------|
-| G502 Lightspeed | ✅ | ✅ | ✅ | ✅ |
-| G502 X Plus | ✅ | ✅ (8 zones) | ✅ | ✅ |
-| PRO DEX 2 | ✅ (44K max) | ⚠️ (limited) | ✅ | ✅ |
+---
 
 ## Installation
 
-### From Flatpak (Recommended)
+### Quick install (all distributions)
+
+The `install.sh` script installs the Python package **and** registers the
+application so it appears in your desktop environment's application menu
+(GNOME, KDE, XFCE, …).
 
 ```bash
-# Install from Flathub (when available)
-flatpak install io.github.ghub4linux
-
-# Or build locally
-cd packaging/flatpak
-flatpak-builder --install --user build io.github.ghub4linux.yml
+git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
+cd Ghub4Linux
 ```
 
-### Arch Linux (AUR)
+Install system dependencies first (see the distribution-specific sections below), then run **one** of the following:
 
 ```bash
-# Using yay
-yay -S ghub4linux
-
-# Or manually
-git clone https://aur.archlinux.org/ghub4linux.git
-cd ghub4linux
-makepkg -si
+bash install.sh          # installs for the current user (no root needed)
 ```
 
-### From Source
+```bash
+bash install.sh --system # installs system-wide (requires sudo)
+```
+
+After that you can start Ghub4Linux from your application launcher **or** from
+a terminal:
 
 ```bash
-# Clone the repository
-git clone https://github.com/MrSchnirschuh/GLinux.git
-cd GLinux
-
-# Install dependencies (Arch Linux)
-sudo pacman -S python python-gobject python-pydantic gtk4 libadwaita hidapi
-
-# Install dependencies (Ubuntu/Debian)
-sudo apt install python3 python3-gi python3-pydantic gir1.2-gtk-4.0 gir1.2-adw-1 libhidapi-hidraw0
-
-# Install Python package
-pip install -e .
-
-# Run
 ghub4linux
 ```
 
-## udev Rules
+> **Note:** If the `ghub4linux` command is not found after installation, add
+> `~/.local/bin` to your PATH by adding this line to your shell profile
+> (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, …):
+>
+> ```bash
+> export PATH="$HOME/.local/bin:$PATH"
+> ```
 
-To allow non-root access to Logitech devices, install the udev rules:
+---
+
+### Step-by-step: Arch Linux / CachyOS
+
+#### 1. Install system dependencies
 
 ```bash
-sudo cp data/udev/99-ghub4linux.rules /etc/udev/rules.d/
+sudo pacman -S python python-gobject python-pydantic gtk4 libadwaita hidapi
+```
+
+#### 2. Clone the repository
+
+```bash
+git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
+cd Ghub4Linux
+```
+
+#### 3. Install (package + desktop entry + icon)
+
+```bash
+bash install.sh
+```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python -m venv` step is needed.
+
+---
+
+### Step-by-step: Ubuntu / Debian
+
+#### 1. Install system dependencies
+
+```bash
+sudo apt install \
+    python3 python3-venv python3-gi python3-gi-cairo \
+    gir1.2-gtk-4.0 gir1.2-adw-1 \
+    libhidapi-hidraw0 python3-pydantic
+```
+
+#### 2. Clone the repository
+
+```bash
+git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
+cd Ghub4Linux
+```
+
+#### 3. Install (package + desktop entry + icon)
+
+```bash
+bash install.sh
+```
+
+> `install.sh` automatically creates a virtual environment at
+> `~/.local/share/ghub4linux/venv` and installs the package there, so no
+> manual `python3 -m venv` step is needed.
+
+---
+
+## udev rules (HID access without root)
+
+By default, HID devices are only accessible by root.
+Create the following udev rule to allow your user to access Logitech devices:
+
+```bash
+sudo tee /etc/udev/rules.d/99-logitech-hid.rules <<'EOF'
+# Logitech HID devices
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", MODE="0660", GROUP="input"
+EOF
+
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
-## Usage
-
-### GUI Application
-
-Launch ghub4linux from your application menu or run:
+Add your user to the `input` group if not already a member:
 
 ```bash
-ghub4linux
+sudo usermod -aG input $USER
+# Log out and back in for the group change to take effect
 ```
 
-### Features Overview
+---
 
-#### DPI Settings
-- Configure up to 5 DPI levels (100-32000 DPI depending on device)
-- Assign colors to each DPI level for quick identification
-- Switch between levels using the DPI button on your mouse
-
-#### Lighting
-- Choose from multiple effects: Static, Breathing, Color Cycle, Wave
-- Adjust brightness and effect speed
-- G502 X Plus supports per-zone lighting control
-
-#### Macros
-- Record macros with keyboard and mouse actions
-- Set delays between actions
-- Configure repeat count or repeat-while-held
-- Assign macros to mouse buttons
-
-#### Application Profiles
-- Create profiles for specific applications (games, productivity tools)
-- Automatic profile switching when applications are launched
-- Different DPI, lighting, and macro settings per application
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Clone the repository
-git clone https://github.com/MrSchnirschuh/GLinux.git
-cd GLinux
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
-pytest tests/ -v
-```
-
-### Code Style
-
-```bash
-# Lint
-ruff check src/ tests/
-
-# Type check
-mypy src/
-```
-
-### Project Structure
+## Project structure
 
 ```
-GLinux/
-├── src/ghub4linux/
-│   ├── core/           # Core functionality
-│   │   ├── config.py   # Configuration management
-│   │   ├── device.py   # Device abstraction
-│   │   └── hid.py      # HID communication
-│   ├── devices/        # Device-specific implementations
-│   │   ├── g502.py     # G502 series support
-│   │   └── pro_dex.py  # PRO DEX 2 support
-│   ├── features/       # Feature modules
-│   │   ├── macros.py   # Macro system
-│   │   └── profiles.py # Profile management
-│   ├── gui/            # GTK4 GUI
-│   │   └── main_window.py
-│   └── main.py         # Application entry point
-├── data/               # Application data files
-├── packaging/          # Packaging configurations
-│   ├── flatpak/        # Flatpak manifest
-│   └── arch/           # Arch Linux PKGBUILD
-└── tests/              # Test suite
+Ghub4Linux/
+├── install.sh              # One-command install + desktop registration
+├── pyproject.toml          # Project definition & dependencies
+├── README.md
+├── data/
+│   ├── com.github.mrschnirschuh.ghub4linux.desktop  # Desktop entry
+│   └── icons/hicolor/scalable/apps/
+│       └── com.github.mrschnirschuh.ghub4linux.svg  # Application icon
+└── src/
+    └── ghub4linux/
+        ├── __init__.py     # Package metadata
+        ├── __main__.py     # Entry point (main())
+        └── app.py          # GTK4/Adwaita application
 ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Adding Device Support
-
-To add support for a new Logitech device:
-
-1. Create a new file in `src/ghub4linux/devices/`
-2. Inherit from `BaseDevice` class
-3. Implement required methods
-4. Register the device in `DeviceManager`
 
 ## License
 
-This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+MIT
 
-## Acknowledgments
-
-- Inspired by [Solaar](https://github.com/pwr-Solaar/Solaar) and other Linux peripheral tools
-- Uses HID++ protocol information from various community sources
-- Built with GTK4 and libadwaita for a modern GNOME experience

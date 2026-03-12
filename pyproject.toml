@@ -46,9 +46,9 @@ ghub4linux = "ghub4linux.main:main"
 ghub4linux-gui = "ghub4linux.main:main"
 
 [project.urls]
-Homepage = "https://github.com/MrSchnirschuh/GLinux"
-Repository = "https://github.com/MrSchnirschuh/GLinux"
-Issues = "https://github.com/MrSchnirschuh/GLinux/issues"
+Homepage = "https://github.com/MrSchnirschuh/Ghub4Linux"
+Repository = "https://github.com/MrSchnirschuh/Ghub4Linux"
+Issues = "https://github.com/MrSchnirschuh/Ghub4Linux/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
