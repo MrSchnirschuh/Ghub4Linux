@@ -18,10 +18,15 @@ application so it appears in your desktop environment's application menu
 ```bash
 git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
 cd Ghub4Linux
+```
 
-# Install system dependencies first (see below), then:
+Install system dependencies first (see the distribution-specific sections below), then run **one** of the following:
+
+```bash
 bash install.sh          # installs for the current user (no root needed)
-# or
+```
+
+```bash
 bash install.sh --system # installs system-wide (requires sudo)
 ```
 

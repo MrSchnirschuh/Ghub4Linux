@@ -39,7 +39,13 @@ ICON_SRC="$SCRIPT_DIR/data/icons/hicolor/scalable/apps/com.github.mrschnirschuh.
 
 # ── 1. Install Python package ──────────────────────────────────────────────────
 echo "==> Installing Python package …"
-$INSTALL_CMD pip install -e "$SCRIPT_DIR"
+if $SYSTEM; then
+    sudo python3 -m pip install "$SCRIPT_DIR"
+elif [ -n "${VIRTUAL_ENV:-}" ]; then
+    python3 -m pip install "$SCRIPT_DIR"
+else
+    python3 -m pip install --user "$SCRIPT_DIR"
+fi
 
 # ── 2. Install desktop entry ───────────────────────────────────────────────────
 echo "==> Installing desktop entry to $APP_DIR …"
