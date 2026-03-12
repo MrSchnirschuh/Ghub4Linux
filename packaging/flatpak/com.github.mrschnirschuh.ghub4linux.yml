@@ -1,0 +1,65 @@
+app-id: com.github.mrschnirschuh.ghub4linux
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: ghub4linux
+
+finish-args:
+  # Access to display
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  
+  # Access to USB/HID devices for Logitech peripherals
+  - --device=all
+  
+  # For application profile switching
+  - --talk-name=org.freedesktop.portal.Desktop
+  
+  # For system tray icon
+  - --talk-name=org.kde.StatusNotifierWatcher
+  
+  # Access to config directory
+  - --filesystem=xdg-config/ghub4linux:create
+
+modules:
+  - name: hidapi
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+    sources:
+      - type: archive
+        url: https://github.com/libusb/hidapi/archive/refs/tags/hidapi-0.14.0.tar.gz
+        sha256: a5714234abe6e1f53647dd8cba7d69f65f71c558b7896ed218864ffcf405bcbd
+
+  - name: python3-hidapi
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} hidapi
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/source/h/hidapi/hidapi-0.14.0.post2.tar.gz
+        sha256: 84de3e3f41ebc6e0cd7ebed5e3c60a6e9c98b0c4e0fac6f70d5f8b3c9f80e6a0
+
+  - name: python3-pydantic
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} pydantic pydantic-core
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/source/p/pydantic/pydantic-2.5.0.tar.gz
+        sha256: 6beea9e0c7f6ef3f33c1e0f0f5e2f3f7e8e3c0a5b9a3f5e0d1c9b7a5e3f1d9c7
+      - type: file
+        url: https://files.pythonhosted.org/packages/source/p/pydantic_core/pydantic_core-2.14.0.tar.gz
+        sha256: 4b6b0e4e3f1d9c7a5e3f1d9c7a5e3f1d9c7a5e3f1d9c7a5e3f1d9c7a5e3f1d9c
+
+  - name: ghub4linux
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-deps --prefix=${FLATPAK_DEST} .
+      - install -Dm644 data/com.github.mrschnirschuh.ghub4linux.desktop ${FLATPAK_DEST}/share/applications/com.github.mrschnirschuh.ghub4linux.desktop
+      - install -Dm644 data/com.github.mrschnirschuh.ghub4linux.metainfo.xml ${FLATPAK_DEST}/share/metainfo/com.github.mrschnirschuh.ghub4linux.metainfo.xml
+      - install -Dm644 data/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg
+    sources:
+      - type: dir
+        path: ../..

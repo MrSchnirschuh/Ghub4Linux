@@ -1,0 +1,24 @@
+# ghub4linux udev rules for Logitech gaming peripherals
+# This file allows non-root users to access Logitech HID devices
+
+# Logitech vendor
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="046d", MODE="0666"
+
+# G502 Lightspeed
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="407f", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="407e", MODE="0666"
+
+# G502 X Plus
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="4099", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="409a", MODE="0666"
+
+# PRO DEX 2 (PRO X Superlight 2 DEX)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="40a3", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="40a4", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="40a5", MODE="0666"
+
+# Lightspeed receivers
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c539", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c53a", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c547", MODE="0666"
