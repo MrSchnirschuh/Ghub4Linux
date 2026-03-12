@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Ghub4Linux
+GenericName=Mouse Configurator
+Comment=Configure your Logitech mouse on Linux (DPI, macros, app profiles)
+Exec=ghub4linux
+Icon=com.github.mrschnirschuh.ghub4linux
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+Keywords=logitech;mouse;dpi;macro;gaming;
+StartupNotify=true
+StartupWMClass=ghub4linux

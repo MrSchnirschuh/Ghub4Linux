@@ -9,7 +9,32 @@ A GTK4/libadwaita application that lets you configure your Logitech mouse on Lin
 
 ## Installation
 
-### Arch Linux / CachyOS
+### Quick install (all distributions)
+
+The `install.sh` script installs the Python package **and** registers the
+application so it appears in your desktop environment's application menu
+(GNOME, KDE, XFCE, …).
+
+```bash
+git clone https://github.com/MrSchnirschuh/Ghub4Linux.git
+cd Ghub4Linux
+
+# Install system dependencies first (see below), then:
+bash install.sh          # installs for the current user (no root needed)
+# or
+bash install.sh --system # installs system-wide (requires sudo)
+```
+
+After that you can start Ghub4Linux from your application launcher **or** from
+a terminal:
+
+```bash
+ghub4linux
+```
+
+---
+
+### Step-by-step: Arch Linux / CachyOS
 
 #### 1. Install system dependencies
 
@@ -32,23 +57,15 @@ source .venv/bin/activate.fish   # fish shell
 # source .venv/bin/activate      # bash / zsh
 ```
 
-#### 4. Install the package
+#### 4. Install (package + desktop entry + icon)
 
 ```bash
-pip install -e .
-```
-
-#### 5. Run
-
-```bash
-ghub4linux
-# or
-python -m ghub4linux
+bash install.sh
 ```
 
 ---
 
-### Ubuntu / Debian
+### Step-by-step: Ubuntu / Debian
 
 #### 1. Install system dependencies
 
@@ -73,16 +90,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-#### 4. Install the package
+#### 4. Install (package + desktop entry + icon)
 
 ```bash
-pip install -e .
-```
-
-#### 5. Run
-
-```bash
-ghub4linux
+bash install.sh
 ```
 
 ---
@@ -115,8 +126,13 @@ sudo usermod -aG input $USER
 
 ```
 Ghub4Linux/
+├── install.sh              # One-command install + desktop registration
 ├── pyproject.toml          # Project definition & dependencies
 ├── README.md
+├── data/
+│   ├── com.github.mrschnirschuh.ghub4linux.desktop  # Desktop entry
+│   └── icons/hicolor/scalable/apps/
+│       └── com.github.mrschnirschuh.ghub4linux.svg  # Application icon
 └── src/
     └── ghub4linux/
         ├── __init__.py     # Package metadata
