@@ -174,7 +174,7 @@ class DPIPanel(Gtk.Box):
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply DPI settings."""
         levels = []
-        for scale, color_btn in zip(self.dpi_scales, self.color_buttons):
+        for scale, color_btn in zip(self.dpi_scales, self.color_buttons, strict=True):
             dpi = int(scale.get_value())
             rgba = color_btn.get_rgba()
             color = RGBColor(

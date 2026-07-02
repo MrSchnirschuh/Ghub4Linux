@@ -12,7 +12,7 @@ from .config import (
     DPISettings,
     LightingSettings,
 )
-from .hid import HIDConnection, HIDDevice, HIDManager, HIDError
+from .hid import HIDConnection, HIDDevice, HIDError, HIDManager
 
 logger = logging.getLogger(__name__)
 
