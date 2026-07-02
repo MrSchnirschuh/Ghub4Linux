@@ -6,7 +6,7 @@ Supports:
 
 import logging
 
-from ..core.config import DeviceConfig, DPISettings, LightingSettings
+from ..core.config import DeviceConfig, LightingSettings
 from ..core.device import (
     ConnectionType,
     DeviceCapability,
