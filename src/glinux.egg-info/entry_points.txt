@@ -1,5 +1,0 @@
-[console_scripts]
-glinux = glinux.main:main
-
-[gui_scripts]
-glinux-gui = glinux.main:main
