@@ -238,7 +238,7 @@ class TestMacroManager:
         manager = MacroManager()
         device_id = "test:123"
 
-        manager.start_recording(device_id)
+        manager.start_recording()
         assert manager.is_recording()
 
         macro = manager.stop_recording(device_id, "Recorded Macro")

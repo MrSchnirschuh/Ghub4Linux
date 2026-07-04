@@ -11,7 +11,6 @@ from ..core.device import (
     ConnectionType,
     DeviceCapability,
     DeviceInfo,
-    DeviceType,
 )
 from ..core.hid import HIDDevice
 from .g502 import G502Device
@@ -62,22 +61,13 @@ class ProDex2(G502Device):
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
-        info = super().get_device_info()
-        return DeviceInfo(
+        return self._make_device_info(
             name="PRO X SUPERLIGHT 2 DEX",
             model="PRO X SUPERLIGHT 2 DEX",
-            vendor_id=info.vendor_id,
-            product_id=info.product_id,
-            serial_number=info.serial_number,
-            firmware_version=info.firmware_version,
-            device_type=DeviceType.MOUSE,
-            connection_type=self._get_connection_type(),
-            has_battery=True,
             has_rgb=False,
             max_dpi=self.MAX_DPI,
             dpi_step=self.DPI_STEP,
             button_count=self.BUTTON_COUNT,
-            has_onboard_profiles=True,
         )
 
     def _get_connection_type(self) -> ConnectionType:

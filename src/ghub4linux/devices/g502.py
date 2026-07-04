@@ -93,21 +93,39 @@ class G502Device(BaseDevice):
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
-        return DeviceInfo(
+        return self._make_device_info(
             name=self.hid_device.product or "G502",
             model="G502",
+            has_rgb=True,
+        )
+
+    def _make_device_info(
+        self,
+        name: str,
+        model: str,
+        has_rgb: bool = True,
+        has_battery: bool = True,
+        max_dpi: int | None = None,
+        dpi_step: int | None = None,
+        button_count: int | None = None,
+        has_onboard_profiles: bool = True,
+    ) -> DeviceInfo:
+        """Build a DeviceInfo with common fields filled from the device."""
+        return DeviceInfo(
+            name=name,
+            model=model,
             vendor_id=self.hid_device.vendor_id,
             product_id=self.hid_device.product_id,
             serial_number=self.hid_device.serial_number,
             firmware_version=self._get_firmware_version(),
             device_type=DeviceType.MOUSE,
             connection_type=self._get_connection_type(),
-            has_battery=True,
-            has_rgb=True,
-            max_dpi=self.MAX_DPI,
-            dpi_step=self.DPI_STEP,
-            button_count=self.BUTTON_COUNT,
-            has_onboard_profiles=True,
+            has_battery=has_battery,
+            has_rgb=has_rgb,
+            max_dpi=max_dpi or self.MAX_DPI,
+            dpi_step=dpi_step or self.DPI_STEP,
+            button_count=button_count or self.BUTTON_COUNT,
+            has_onboard_profiles=has_onboard_profiles,
         )
 
     def _get_firmware_version(self) -> str:
@@ -260,22 +278,9 @@ class G502Lightspeed(G502Device):
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
-        info = super().get_device_info()
-        return DeviceInfo(
+        return self._make_device_info(
             name="G502 Lightspeed",
             model="G502 Lightspeed",
-            vendor_id=info.vendor_id,
-            product_id=info.product_id,
-            serial_number=info.serial_number,
-            firmware_version=info.firmware_version,
-            device_type=DeviceType.MOUSE,
-            connection_type=ConnectionType.LIGHTSPEED,
-            has_battery=True,
-            has_rgb=True,
-            max_dpi=self.MAX_DPI,
-            dpi_step=50,
-            button_count=11,
-            has_onboard_profiles=True,
         )
 
 
@@ -302,22 +307,10 @@ class G502XPlus(G502Device):
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
-        info = super().get_device_info()
-        return DeviceInfo(
+        return self._make_device_info(
             name="G502 X Plus",
             model="G502X Plus",
-            vendor_id=info.vendor_id,
-            product_id=info.product_id,
-            serial_number=info.serial_number,
-            firmware_version=info.firmware_version,
-            device_type=DeviceType.MOUSE,
-            connection_type=ConnectionType.LIGHTSPEED,
-            has_battery=True,
-            has_rgb=True,
-            max_dpi=self.MAX_DPI,
-            dpi_step=50,
             button_count=self.BUTTON_COUNT,
-            has_onboard_profiles=True,
         )
 
     def set_zone_lighting(self, zone: str, effect: LightingEffect) -> bool:

@@ -7,95 +7,12 @@ with support for key sequences, delays, and mouse actions.
 import logging
 import time
 from dataclasses import dataclass
-from enum import Enum
 from threading import Event, Thread
 from typing import Callable
 
 from ..core.config import Macro, MacroAction
 
 logger = logging.getLogger(__name__)
-
-
-class MacroActionType(Enum):
-    """Types of macro actions."""
-
-    KEY_PRESS = "keypress"
-    KEY_DOWN = "keydown"
-    KEY_UP = "keyup"
-    DELAY = "delay"
-    MOUSE_CLICK = "mouse_click"
-    MOUSE_MOVE = "mouse_move"
-    MOUSE_SCROLL = "mouse_scroll"
-
-
-# Key code mapping (subset of common keys)
-KEY_CODES = {
-    "a": 0x04,
-    "b": 0x05,
-    "c": 0x06,
-    "d": 0x07,
-    "e": 0x08,
-    "f": 0x09,
-    "g": 0x0A,
-    "h": 0x0B,
-    "i": 0x0C,
-    "j": 0x0D,
-    "k": 0x0E,
-    "l": 0x0F,
-    "m": 0x10,
-    "n": 0x11,
-    "o": 0x12,
-    "p": 0x13,
-    "q": 0x14,
-    "r": 0x15,
-    "s": 0x16,
-    "t": 0x17,
-    "u": 0x18,
-    "v": 0x19,
-    "w": 0x1A,
-    "x": 0x1B,
-    "y": 0x1C,
-    "z": 0x1D,
-    "1": 0x1E,
-    "2": 0x1F,
-    "3": 0x20,
-    "4": 0x21,
-    "5": 0x22,
-    "6": 0x23,
-    "7": 0x24,
-    "8": 0x25,
-    "9": 0x26,
-    "0": 0x27,
-    "enter": 0x28,
-    "escape": 0x29,
-    "backspace": 0x2A,
-    "tab": 0x2B,
-    "space": 0x2C,
-    "f1": 0x3A,
-    "f2": 0x3B,
-    "f3": 0x3C,
-    "f4": 0x3D,
-    "f5": 0x3E,
-    "f6": 0x3F,
-    "f7": 0x40,
-    "f8": 0x41,
-    "f9": 0x42,
-    "f10": 0x43,
-    "f11": 0x44,
-    "f12": 0x45,
-    "ctrl": 0xE0,
-    "shift": 0xE1,
-    "alt": 0xE2,
-    "meta": 0xE3,
-}
-
-# Modifier key masks
-MODIFIER_MASKS = {
-    "ctrl": 0x01,
-    "shift": 0x02,
-    "alt": 0x04,
-    "meta": 0x08,
-}
 
 
 @dataclass
@@ -127,14 +44,13 @@ class MacroPlayer:
         logger.debug(f"Macro action: {action.action_type} = {action.value}")
 
     def play_macro(
-        self, macro: Macro, blocking: bool = False, hold_key: bool = False  # noqa: ARG002
+        self, macro: Macro, blocking: bool = False
     ) -> str | None:
         """Play a macro.
 
         Args:
             macro: The macro to play
             blocking: If True, wait for macro to complete
-            hold_key: If True, repeat while this method's caller holds
 
         Returns:
             Playback ID for non-blocking calls, None for blocking
@@ -361,7 +277,7 @@ class MacroManager:
         """Stop a macro playback."""
         return self._player.stop_macro(playback_id)
 
-    def start_recording(self, device_id: str) -> None:  # noqa: ARG002
+    def start_recording(self) -> None:
         """Start recording a macro."""
         self._recorder.start_recording()
 
