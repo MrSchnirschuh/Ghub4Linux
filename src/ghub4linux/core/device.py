@@ -21,10 +21,7 @@ class DeviceType(Enum):
     """Type of Logitech device."""
 
     MOUSE = "mouse"
-    KEYBOARD = "keyboard"
-    HEADSET = "headset"
     MOUSEPAD = "mousepad"
-    UNKNOWN = "unknown"
 
 
 class ConnectionType(Enum):
@@ -32,7 +29,6 @@ class ConnectionType(Enum):
 
     WIRED = "wired"
     WIRELESS_RECEIVER = "wireless_receiver"
-    BLUETOOTH = "bluetooth"
     LIGHTSPEED = "lightspeed"
 
 
@@ -71,10 +67,8 @@ class DeviceCapability(Enum):
     DPI_ADJUSTMENT = "dpi_adjustment"
     RGB_LIGHTING = "rgb_lighting"
     MACROS = "macros"
-    ONBOARD_PROFILES = "onboard_profiles"
     BATTERY_STATUS = "battery_status"
     FIRMWARE_UPDATE = "firmware_update"
-    REPORT_RATE = "report_rate"
 
 
 class BaseDevice(ABC):
@@ -347,9 +341,3 @@ class DeviceManager:
             device = self._devices[device_id]
             device.disconnect()
             del self._devices[device_id]
-
-    def save_device_configs(self) -> None:
-        """Save all device configurations."""
-        for device_id, device in self._devices.items():
-            self.app_config.set_device_config(device_id, device.config)
-        self.app_config.save()

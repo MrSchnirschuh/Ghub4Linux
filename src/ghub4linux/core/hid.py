@@ -185,7 +185,3 @@ class HIDManager:
     def find_logitech_devices(self) -> list[HIDDevice]:
         """Find all Logitech gaming devices."""
         return self.enumerate_devices(LOGITECH_VENDOR_ID)
-
-    def get_connection(self, device: HIDDevice) -> HIDConnection:
-        """Get a connection to a device."""
-        return HIDConnection(device)
