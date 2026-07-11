@@ -14,7 +14,9 @@ from ..core.device import (
     DeviceInfo,
     DeviceType,
 )
-from ..core.hid import HIDDevice
+from ..core.hid import (
+    HIDDevice,
+)
 
 logger = logging.getLogger(__name__)
 

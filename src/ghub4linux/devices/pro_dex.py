@@ -12,7 +12,12 @@ from ..core.device import (
     DeviceCapability,
     DeviceInfo,
 )
-from ..core.hid import HIDDevice
+from ..core.hid import (
+    LIGHTSPEED_RECEIVER_PID_1,
+    LIGHTSPEED_RECEIVER_PID_2,
+    LIGHTSPEED_RECEIVER_PID_3,
+    HIDDevice,
+)
 from .g502 import G502Device
 
 logger = logging.getLogger(__name__)
@@ -22,11 +27,6 @@ logger = logging.getLogger(__name__)
 PRO_DEX_2_PID = 0x40A3  # Pro DEX 2 wireless
 PRO_DEX_2_WIRED_PID = 0x40A4  # Pro DEX 2 wired mode
 PRO_DEX_2_RECEIVER_PID = 0x40A5  # Pro DEX 2 receiver
-
-# Lightspeed receiver PIDs (shared across multiple Logitech mice)
-LIGHTSPEED_RECEIVER_PID_1 = 0xC539
-LIGHTSPEED_RECEIVER_PID_2 = 0xC53A
-LIGHTSPEED_RECEIVER_PID_3 = 0xC547
 
 
 class ProDex2(G502Device):

@@ -22,6 +22,9 @@ from ..core.device import (
     DeviceType,
 )
 from ..core.hid import (
+    LIGHTSPEED_RECEIVER_PID_1,
+    LIGHTSPEED_RECEIVER_PID_2,
+    LIGHTSPEED_RECEIVER_PID_3,
     HIDDevice,
 )
 
@@ -33,11 +36,7 @@ G502_LIGHTSPEED_PID = 0x407F  # G502 Lightspeed wireless
 G502_LIGHTSPEED_WIRED_PID = 0x407E  # G502 Lightspeed wired mode
 G502X_PLUS_PID = 0x4099  # G502X Plus
 G502X_PLUS_RECEIVER_PID = 0x409A  # G502X Plus receiver
-
-# Lightspeed receiver PIDs (shared across multiple Logitech mice)
-LIGHTSPEED_RECEIVER_PID_1 = 0xC539
-LIGHTSPEED_RECEIVER_PID_2 = 0xC53A
-LIGHTSPEED_RECEIVER_PID_3 = 0xC547
+G502X_PLUS_WIRED_PID = 0x409B  # G502X Plus wired mode
 
 
 class G502Device(BaseDevice):
@@ -60,7 +59,6 @@ class G502Device(BaseDevice):
             DeviceCapability.BATTERY_STATUS,
             DeviceCapability.REPORT_RATE,
         }
-        self._feature_indexes: dict[int, int] = {}
         self._dpi_feature_index: int | None = None
         self._battery_feature_index: int | None = None
         self._rgb_feature_index: int | None = None
@@ -149,15 +147,14 @@ class G502Device(BaseDevice):
     def _get_connection_type(self) -> ConnectionType:
         """Determine connection type."""
         # G502 Lightspeed can be wired or wireless
-        if self.hid_device.product_id in (G502_LIGHTSPEED_WIRED_PID,):
+        if self.hid_device.product_id in (G502_LIGHTSPEED_WIRED_PID, G502X_PLUS_WIRED_PID):
             return ConnectionType.WIRED
         return ConnectionType.LIGHTSPEED
 
     def _get_battery_status(self) -> BatteryStatus | None:
         """Get battery status from device."""
         if not self._connection or self._battery_feature_index is None:
-            # Return mock data for demonstration
-            return BatteryStatus(level=85, charging=False, voltage=3.8)
+            return None
 
         try:
             response = self._connection.send_feature_request(
@@ -329,6 +326,7 @@ G502_DEVICES = {
     G502_LIGHTSPEED_WIRED_PID: G502Lightspeed,
     G502X_PLUS_PID: G502XPlus,
     G502X_PLUS_RECEIVER_PID: G502XPlus,
+    G502X_PLUS_WIRED_PID: G502XPlus,
 }
 
 # Hint-based entries for shared Lightspeed receiver PIDs.
