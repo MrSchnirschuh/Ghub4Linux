@@ -53,7 +53,6 @@ class DPIPanel(Gtk.Box):
             scale.set_value(level.dpi)
             scale.set_hexpand(True)
             scale.set_draw_value(True)
-            scale.connect("value-changed", self._on_dpi_changed, i)
             self.dpi_scales.append(scale)
             level_box.append(scale)
 
@@ -61,7 +60,6 @@ class DPIPanel(Gtk.Box):
             color = level.color
             rgba = self._rgb_to_rgba(color)
             color_btn = Gtk.ColorButton.new_with_rgba(rgba)
-            color_btn.connect("color-set", self._on_color_changed, i)
             self.color_buttons.append(color_btn)
             level_box.append(color_btn)
 
@@ -78,7 +76,6 @@ class DPIPanel(Gtk.Box):
         for i in range(len(settings.levels)):
             self.active_combo.append_text(f"Level {i + 1}")
         self.active_combo.set_active(settings.active_level)
-        self.active_combo.connect("changed", self._on_active_changed)
         active_box.append(self.active_combo)
 
         self.append(active_box)
@@ -98,18 +95,6 @@ class DPIPanel(Gtk.Box):
         rgba.blue = color.blue / 255.0
         rgba.alpha = 1.0
         return rgba
-
-    def _on_dpi_changed(self, scale: Gtk.Scale, level_index: int) -> None:
-        """Handle DPI value change."""
-        pass  # Will apply on button click
-
-    def _on_color_changed(self, button: Gtk.ColorButton, level_index: int) -> None:
-        """Handle color change."""
-        pass  # Will apply on button click
-
-    def _on_active_changed(self, combo: Gtk.ComboBoxText) -> None:
-        """Handle active level change."""
-        pass  # Will apply on button click
 
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply DPI settings."""
