@@ -69,6 +69,8 @@ class DeviceCapability(Enum):
     MACROS = "macros"
     BATTERY_STATUS = "battery_status"
     FIRMWARE_UPDATE = "firmware_update"
+    ONBOARD_PROFILES = "onboard_profiles"
+    REPORT_RATE = "report_rate"
 
 
 class BaseDevice(ABC):
