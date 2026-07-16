@@ -1,0 +1,22 @@
+[Unit]
+Description=ghub4linux — Logitech device control daemon (headless)
+Documentation=https://github.com/pandium/ghub4linux
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ghub4linux-cli daemon
+Restart=on-failure
+RestartSec=5
+User=%i
+Nice=-10
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/ghub4linux
+
+[Install]
+WantedBy=multi-user.target

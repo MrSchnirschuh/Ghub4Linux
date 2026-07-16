@@ -140,6 +140,13 @@ def test_cli_no_args():
     assert exc.value.code == 2
 
 
+def test_cli_daemon_help():
+    """Test daemon subcommand help."""
+    with pytest.raises(SystemExit) as exc:
+        main(["daemon", "--help"])
+    assert exc.value.code == 0
+
+
 def test_cli_help():
     """Test --help works."""
     with pytest.raises(SystemExit) as exc:
@@ -149,7 +156,7 @@ def test_cli_help():
 
 def test_cli_list_help():
     """Test subcommand --help works."""
-    for cmd in ["list", "info", "battery", "dpi", "lighting"]:
+    for cmd in ["list", "info", "battery", "dpi", "lighting", "daemon"]:
         with pytest.raises(SystemExit) as exc:
             main([cmd, "--help"])
         assert exc.value.code == 0, f"{cmd} --help failed"

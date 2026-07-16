@@ -146,6 +146,39 @@ def cmd_lighting(args: argparse.Namespace) -> None:
         print(f"Color:      #{settings.effect.color.to_hex()}")
 
 
+def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
+    """Run in daemon mode — scan devices, keep connections alive."""
+    import signal
+    import time
+
+    manager = _setup_manager()
+    running = True
+
+    def _handle_signal(signum, frame):  # noqa: ARG001
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    logger.info("ghub4linux daemon starting")
+    while running:
+        try:
+            devices = manager.scan_devices()
+            if devices:
+                logger.info("Found %d new device(s)", len(devices))
+            for device in manager.get_all_devices():
+                if device.is_connected:
+                    battery = device.get_battery_status()
+                    if battery and battery.level < 20:
+                        logger.warning(
+                            "Low battery: %s at %d%%", device.name, battery.level
+                        )
+        except Exception as e:
+            logger.error("Daemon error: %s", e)
+        time.sleep(args.interval)
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -174,6 +207,10 @@ def main(argv: list[str] | None = None) -> NoReturn:
     p_light.add_argument("--effect", choices=["static", "breathing", "cycle", "wave", "off"], default=None)
     p_light.add_argument("--brightness", type=int, default=None, help="Brightness 0-100")
     p_light.set_defaults(func=cmd_lighting)
+
+    p_daemon = sub.add_parser("daemon", help="Run as headless daemon")
+    p_daemon.add_argument("--interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
+    p_daemon.set_defaults(func=cmd_daemon)
 
     args = parser.parse_args(argv)
     args.func(args)
