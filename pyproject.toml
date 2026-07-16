@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 ghub4linux = "ghub4linux.main:main"
+ghub4linux-cli = "ghub4linux.cli:main"
 
 [project.gui-scripts]
 ghub4linux-gui = "ghub4linux.main:main"

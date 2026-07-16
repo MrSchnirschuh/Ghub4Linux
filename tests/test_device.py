@@ -218,7 +218,7 @@ class TestDeviceManager:
 
         # Manually add device for testing
         device = MockDevice(mock_hid_device)
-        manager._devices[device.device_id] = device
+        manager.add_device(device)
 
         result = manager.get_device(device.device_id)
         assert result is device
@@ -235,7 +235,7 @@ class TestDeviceManager:
 
         # Add multiple devices
         device = MockDevice(mock_hid_device)
-        manager._devices[device.device_id] = device
+        manager.add_device(device)
 
         devices = manager.get_all_devices()
         assert len(devices) == 1
@@ -249,7 +249,7 @@ class TestDeviceManager:
         manager = DeviceManager(config)
 
         device = MockDevice(mock_hid_device)
-        manager._devices[device.device_id] = device
+        manager.add_device(device)
 
         manager.remove_device(device.device_id)
 

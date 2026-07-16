@@ -233,7 +233,7 @@ class MainWindow(Adw.ApplicationWindow):
         for hid_dev, dev_cls in zip(demo_devices, device_classes, strict=True):
             device = dev_cls(hid_dev)
             device._info = device.get_device_info()
-            self.device_manager._devices[hid_dev.device_id] = device
+            self.device_manager.add_device(device)
             row = DeviceRow(device)
             self.device_list.append(row)
 

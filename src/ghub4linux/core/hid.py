@@ -153,10 +153,6 @@ class HIDConnection:
 class HIDManager:
     """Manages HID device enumeration and connections."""
 
-    def __init__(self):
-        """Initialize HID manager."""
-        self._devices: list[HIDDevice] = []
-
     def enumerate_devices(
         self, vendor_id: int = LOGITECH_VENDOR_ID, product_id: int = 0
     ) -> list[HIDDevice]:
@@ -178,7 +174,6 @@ class HIDManager:
                     usage=dev_info.get("usage", 0),
                 )
                 devices.append(device)
-            self._devices = devices
             return devices
         except ImportError:
             logger.warning("hidapi not available, using mock devices")

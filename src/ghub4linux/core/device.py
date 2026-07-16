@@ -341,3 +341,7 @@ class DeviceManager:
             device = self._devices[device_id]
             device.disconnect()
             del self._devices[device_id]
+
+    def add_device(self, device: BaseDevice) -> None:
+        """Add a device directly (used for demo/testing)."""
+        self._devices[device.device_id] = device
