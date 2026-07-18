@@ -160,3 +160,59 @@ def test_cli_list_help():
         with pytest.raises(SystemExit) as exc:
             main([cmd, "--help"])
         assert exc.value.code == 0, f"{cmd} --help failed"
+
+
+def test_cli_daemon_starts_and_stops(mock_manager, monkeypatch):
+    """Test daemon starts, scans devices, and exits on signal."""
+    import signal
+    import threading
+    import time
+
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+
+    def _send_signal():
+        time.sleep(0.1)
+        signal.raise_signal(signal.SIGINT)
+
+    t = threading.Thread(target=_send_signal, daemon=True)
+    t.start()
+    with pytest.raises(SystemExit) as exc:
+        main(["daemon", "--interval", "1"])
+    assert exc.value.code == 0
+
+
+def test_cli_daemon_interval_flag():
+    """Test daemon --interval is accepted."""
+    with pytest.raises(SystemExit) as exc:
+        main(["daemon", "--interval", "30", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_export_help():
+    """Test profile export --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "export", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_import_help():
+    """Test profile import --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "import", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_export_nonexistent(mock_manager, monkeypatch):
+    """Test profile export on nonexistent device exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "export", "dead:beef:0000"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_import_nonexistent(mock_manager, monkeypatch):
+    """Test profile import on nonexistent device exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "import", "dead:beef:0000", "/tmp/nonexistent.json"])
+    assert exc.value.code == 1

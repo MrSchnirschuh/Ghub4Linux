@@ -146,6 +146,46 @@ def cmd_lighting(args: argparse.Namespace) -> None:
         print(f"Color:      #{settings.effect.color.to_hex()}")
 
 
+def cmd_profile_export(args: argparse.Namespace) -> None:
+    """Export device profiles to a JSON file."""
+    import json
+
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    data = device.config.model_dump()
+    output = args.output or f"{device.device_id}_profiles.json"
+    with open(output, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Exported {len(data['profiles'])} profile(s) to {output}")
+
+
+def cmd_profile_import(args: argparse.Namespace) -> None:
+    """Import device profiles from a JSON file."""
+    import json
+
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    with open(args.file) as f:
+        data = json.load(f)
+
+    from .core.config import DeviceConfig
+    imported = DeviceConfig.model_validate(data)
+    device._config = imported
+    manager.app_config.set_device_config(args.device_id, imported)
+    manager.app_config.save()
+    print(f"Imported {len(imported.profiles)} profile(s) for {device.name}")
+
+
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
     import signal
@@ -177,6 +217,19 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
         except Exception as e:
             logger.error("Daemon error: %s", e)
         time.sleep(args.interval)
+
+
+def _add_profile_subcommands(sub):
+    """Add profile export/import subcommands to a subparser group."""
+    p_export = sub.add_parser("export", help="Export device profiles to JSON")
+    p_export.add_argument("device_id", help="Device ID")
+    p_export.add_argument("--output", "-o", default=None, help="Output file path")
+    p_export.set_defaults(func=cmd_profile_export)
+
+    p_import = sub.add_parser("import", help="Import device profiles from JSON")
+    p_import.add_argument("device_id", help="Device ID")
+    p_import.add_argument("file", help="JSON file to import")
+    p_import.set_defaults(func=cmd_profile_import)
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
@@ -211,6 +264,9 @@ def main(argv: list[str] | None = None) -> NoReturn:
     p_daemon = sub.add_parser("daemon", help="Run as headless daemon")
     p_daemon.add_argument("--interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
     p_daemon.set_defaults(func=cmd_daemon)
+
+    p_profile = sub.add_parser("profile", help="Export/import device profiles")
+    _add_profile_subcommands(p_profile.add_subparsers(dest="profile_command", required=True))
 
     args = parser.parse_args(argv)
     args.func(args)
