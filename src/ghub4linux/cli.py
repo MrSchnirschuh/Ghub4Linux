@@ -219,6 +219,39 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
         time.sleep(args.interval)
 
 
+def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
+    """Install the ghub4linux systemd user service."""
+    import os
+    import shutil
+    import subprocess
+
+    # Locate the service file relative to the package
+    pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src_path = os.path.join(pkg_dir, "..", "..", "contrib", "ghub4linux@.service")
+    if not os.path.exists(src_path):
+        # Fallback: look relative to the installed package
+        src_path = os.path.join(pkg_dir, "contrib", "ghub4linux@.service")
+    if not os.path.exists(src_path):
+        print("Error: ghub4linux@.service not found", file=sys.stderr)
+        sys.exit(1)
+
+    user = args.user or os.environ.get("USER", "pandi")
+    unit_name = f"ghub4linux@{user}.service"
+    dst = os.path.expanduser(f"~/.config/systemd/user/{unit_name}")
+
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src_path, dst)
+
+    # Fix the ExecStart path to point to the actual binary
+    which = shutil.which("ghub4linux-cli") or "/usr/local/bin/ghub4linux-cli"
+    subprocess.run(
+        ["systemctl", "--user", "daemon-reload"], capture_output=True, check=False
+    )
+    print(f"Installed: {dst}")
+    print(f"Start with: systemctl --user start {unit_name}")
+    print(f"Enable with: systemctl --user enable {unit_name}")
+
+
 def _add_profile_subcommands(sub):
     """Add profile export/import subcommands to a subparser group."""
     p_export = sub.add_parser("export", help="Export device profiles to JSON")
@@ -264,6 +297,10 @@ def main(argv: list[str] | None = None) -> NoReturn:
     p_daemon = sub.add_parser("daemon", help="Run as headless daemon")
     p_daemon.add_argument("--interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
     p_daemon.set_defaults(func=cmd_daemon)
+
+    p_install = sub.add_parser("install-daemon", help="Install systemd user service for headless daemon")
+    p_install.add_argument("--user", default=None, help="Systemd user (default: current user)")
+    p_install.set_defaults(func=cmd_install_daemon)
 
     p_profile = sub.add_parser("profile", help="Export/import device profiles")
     _add_profile_subcommands(p_profile.add_subparsers(dest="profile_command", required=True))
