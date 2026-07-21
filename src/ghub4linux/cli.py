@@ -11,11 +11,17 @@ Ponytail: argparse over click/typer — zero new deps.
 """
 
 import argparse
+import json
 import logging
+import os
+import shutil
+import signal
+import subprocess
 import sys
+import time
 from typing import NoReturn
 
-from .core.config import AppConfig
+from .core.config import AppConfig, DPILevel, LightingEffect
 from .core.device import DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_RECEIVER_HINTS
@@ -105,7 +111,6 @@ def cmd_dpi(args: argparse.Namespace) -> None:
     if args.dpi is not None:
         level_idx = args.level if args.level is not None else settings.active_level
         if 0 <= level_idx < len(settings.levels):
-            from .core.config import DPILevel
             settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
             device.set_dpi_settings(settings)
             print(f"Set DPI level {level_idx + 1} to {args.dpi}")
@@ -134,7 +139,6 @@ def cmd_lighting(args: argparse.Namespace) -> None:
         device.set_lighting_settings(settings)
         print(f"Lighting {'enabled' if args.on else 'disabled'}")
     elif args.effect is not None:
-        from .core.config import LightingEffect
         settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
         device.set_lighting_settings(settings)
         print(f"Set effect: {args.effect}")
@@ -148,8 +152,6 @@ def cmd_lighting(args: argparse.Namespace) -> None:
 
 def cmd_profile_export(args: argparse.Namespace) -> None:
     """Export device profiles to a JSON file."""
-    import json
-
     manager = _setup_manager()
     manager.scan_devices()
     device = manager.get_device(args.device_id)
@@ -166,8 +168,6 @@ def cmd_profile_export(args: argparse.Namespace) -> None:
 
 def cmd_profile_import(args: argparse.Namespace) -> None:
     """Import device profiles from a JSON file."""
-    import json
-
     manager = _setup_manager()
     manager.scan_devices()
     device = manager.get_device(args.device_id)
@@ -188,9 +188,6 @@ def cmd_profile_import(args: argparse.Namespace) -> None:
 
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
-    import signal
-    import time
-
     manager = _setup_manager()
     running = True
 
@@ -221,10 +218,6 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
 
 def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Install the ghub4linux systemd user service."""
-    import os
-    import shutil
-    import subprocess
-
     # Locate the service file relative to the package
     pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_path = os.path.join(pkg_dir, "..", "..", "contrib", "ghub4linux@.service")
@@ -242,8 +235,6 @@ def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     shutil.copy2(src_path, dst)
 
-    # Fix the ExecStart path to point to the actual binary
-    which = shutil.which("ghub4linux-cli") or "/usr/local/bin/ghub4linux-cli"
     subprocess.run(
         ["systemctl", "--user", "daemon-reload"], capture_output=True, check=False
     )
