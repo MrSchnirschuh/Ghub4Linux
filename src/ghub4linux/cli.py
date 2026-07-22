@@ -216,6 +216,51 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
         time.sleep(args.interval)
 
 
+def cmd_monitor(args: argparse.Namespace) -> None:
+    """Monitor device battery levels in real-time."""
+    manager = _setup_manager()
+    manager.scan_devices()
+
+    if args.device_id:
+        device = manager.get_device(args.device_id)
+        if not device:
+            print(f"Device not found: {args.device_id}")
+            sys.exit(1)
+        devices = [device]
+    else:
+        devices = manager.get_all_devices()
+        if not devices:
+            print("No devices found.")
+            return
+
+    running = True
+
+    def _handle_signal(signum, frame):  # noqa: ARG001
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    print(f"{'Device':40} {'Battery':8} {'Status':12} {'Voltage':8}")
+    print("-" * 70)
+    while running:
+        for device in devices:
+            if not device.is_connected:
+                continue
+            battery = device.get_battery_status()
+            if battery is None:
+                continue
+            status = "charging" if battery.charging else "discharging"
+            voltage = f"{battery.voltage:.3f}V" if battery.voltage is not None else "N/A"
+            print(f"{device.name:40} {battery.level:3d}%     {status:12} {voltage:8}")
+        try:
+            signal.pause() if args.interval == 0 else time.sleep(args.interval)
+        except InterruptedError:
+            break
+    sys.exit(0)
+
+
 def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Install the ghub4linux systemd user service."""
     # Locate the service file relative to the package
@@ -292,6 +337,11 @@ def main(argv: list[str] | None = None) -> NoReturn:
     p_install = sub.add_parser("install-daemon", help="Install systemd user service for headless daemon")
     p_install.add_argument("--user", default=None, help="Systemd user (default: current user)")
     p_install.set_defaults(func=cmd_install_daemon)
+
+    p_monitor = sub.add_parser("monitor", help="Monitor device battery levels in real-time")
+    p_monitor.add_argument("device_id", nargs="?", default=None, help="Device ID (omit for all devices)")
+    p_monitor.add_argument("--interval", type=int, default=5, help="Poll interval in seconds (default: 5)")
+    p_monitor.set_defaults(func=cmd_monitor)
 
     p_profile = sub.add_parser("profile", help="Export/import device profiles")
     _add_profile_subcommands(p_profile.add_subparsers(dest="profile_command", required=True))
