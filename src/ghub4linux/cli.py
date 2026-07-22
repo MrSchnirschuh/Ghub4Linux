@@ -186,6 +186,43 @@ def cmd_profile_import(args: argparse.Namespace) -> None:
     print(f"Imported {len(imported.profiles)} profile(s) for {device.name}")
 
 
+def cmd_profile_list(args: argparse.Namespace) -> None:
+    """List all profiles for a device."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    for i, profile in enumerate(config.profiles):
+        marker = " <-- active" if i == config.active_profile else ""
+        print(f"  {i + 1}. {profile.name}{marker}")
+
+
+def cmd_profile_switch(args: argparse.Namespace) -> None:
+    """Switch to a named profile on a device."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    for i, profile in enumerate(config.profiles):
+        if profile.name == args.profile_name:
+            device.apply_profile(i)
+            manager.app_config.set_device_config(args.device_id, config)
+            manager.app_config.save()
+            print(f"Switched to profile: {profile.name}")
+            return
+
+    print(f"Profile not found: {args.profile_name}")
+    sys.exit(1)
+
+
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
     manager = _setup_manager()
@@ -289,7 +326,7 @@ def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
 
 
 def _add_profile_subcommands(sub):
-    """Add profile export/import subcommands to a subparser group."""
+    """Add profile export/import/list/switch subcommands to a subparser group."""
     p_export = sub.add_parser("export", help="Export device profiles to JSON")
     p_export.add_argument("device_id", help="Device ID")
     p_export.add_argument("--output", "-o", default=None, help="Output file path")
@@ -299,6 +336,15 @@ def _add_profile_subcommands(sub):
     p_import.add_argument("device_id", help="Device ID")
     p_import.add_argument("file", help="JSON file to import")
     p_import.set_defaults(func=cmd_profile_import)
+
+    p_list = sub.add_parser("list", help="List all profiles for a device")
+    p_list.add_argument("device_id", help="Device ID")
+    p_list.set_defaults(func=cmd_profile_list)
+
+    p_switch = sub.add_parser("switch", help="Switch to a named profile")
+    p_switch.add_argument("device_id", help="Device ID")
+    p_switch.add_argument("profile_name", help="Profile name to switch to")
+    p_switch.set_defaults(func=cmd_profile_switch)
 
 
 def main(argv: list[str] | None = None) -> NoReturn:

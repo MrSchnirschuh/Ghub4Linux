@@ -223,3 +223,62 @@ def test_cli_profile_import_nonexistent(mock_manager, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         main(["profile", "import", "dead:beef:0000", "/tmp/nonexistent.json"])
     assert exc.value.code == 1
+
+
+def test_cli_profile_list(mock_manager, monkeypatch, capsys):
+    """Test 'profile list' shows all profiles for a device."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "list", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Default" in captured.out
+    assert "active" in captured.out
+
+
+def test_cli_profile_list_nonexistent(mock_manager, monkeypatch):
+    """Test 'profile list' on nonexistent device exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "list", "dead:beef:0000"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_switch(mock_manager, monkeypatch, capsys):
+    """Test 'profile switch' switches to a named profile."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "switch", "046d:407f:mock123", "Default"])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Default" in captured.out
+
+
+def test_cli_profile_switch_nonexistent_profile(mock_manager, monkeypatch):
+    """Test 'profile switch' with nonexistent profile name exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "switch", "046d:407f:mock123", "NoSuchProfile"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_switch_nonexistent_device(mock_manager, monkeypatch):
+    """Test 'profile switch' on nonexistent device exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "switch", "dead:beef:0000", "Default"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_list_help():
+    """Test profile list --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "list", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_switch_help():
+    """Test profile switch --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "switch", "--help"])
+    assert exc.value.code == 0
