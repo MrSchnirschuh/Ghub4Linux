@@ -159,7 +159,8 @@ def cmd_profile_export(args: argparse.Namespace) -> None:
         print(f"Device not found: {args.device_id}")
         sys.exit(1)
 
-    data = device.config.model_dump()
+    from dataclasses import asdict
+    data = asdict(device.config)
     output = args.output or f"{device.device_id}_profiles.json"
     with open(output, "w") as f:
         json.dump(data, f, indent=2)
@@ -178,8 +179,8 @@ def cmd_profile_import(args: argparse.Namespace) -> None:
     with open(args.file) as f:
         data = json.load(f)
 
-    from .core.config import DeviceConfig
-    imported = DeviceConfig.model_validate(data)
+    from .core.config import DeviceConfig, _from_dict
+    imported = _from_dict(DeviceConfig, data)
     device._config = imported
     manager.app_config.set_device_config(args.device_id, imported)
     manager.app_config.save()

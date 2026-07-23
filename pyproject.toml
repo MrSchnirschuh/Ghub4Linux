@@ -28,7 +28,6 @@ requires-python = ">=3.10"
 dependencies = [
     "PyGObject>=3.42.0",
     "hidapi>=0.14.0",
-    "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]

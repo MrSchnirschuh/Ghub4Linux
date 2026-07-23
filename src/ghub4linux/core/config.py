@@ -2,14 +2,15 @@
 
 Handles loading, saving, and managing user configurations including
 device profiles, DPI settings, macros, and application-specific profiles.
+
+Ponytail: stdlib dataclasses over pydantic — no external dep for config models.
 """
 
 import json
 import os
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
-
-from pydantic import BaseModel, Field
 
 
 def get_config_dir() -> Path:
@@ -28,12 +29,19 @@ def get_data_dir() -> Path:
     return data_dir
 
 
-class RGBColor(BaseModel):
+@dataclass
+class RGBColor:
     """RGB color representation."""
 
-    red: int = Field(ge=0, le=255, default=255)
-    green: int = Field(ge=0, le=255, default=255)
-    blue: int = Field(ge=0, le=255, default=255)
+    red: int = 255
+    green: int = 255
+    blue: int = 255
+
+    def __post_init__(self) -> None:
+        """Validate RGB values are in 0-255 range."""
+        for name, val in [("red", self.red), ("green", self.green), ("blue", self.blue)]:
+            if not 0 <= val <= 255:
+                raise ValueError(f"{name} must be 0-255, got {val}")
 
     def to_tuple(self) -> tuple[int, int, int]:
         """Convert to tuple."""
@@ -54,62 +62,69 @@ class RGBColor(BaseModel):
         )
 
 
-class DPILevel(BaseModel):
+@dataclass
+class DPILevel:
     """DPI level configuration."""
 
-    dpi: int = Field(ge=100, le=32000, default=800)
-    color: RGBColor = Field(default_factory=RGBColor)
+    dpi: int = 800
+    color: RGBColor = field(default_factory=RGBColor)
 
 
-class DPISettings(BaseModel):
+@dataclass
+class DPISettings:
     """DPI settings for a device."""
 
-    levels: list[DPILevel] = Field(default_factory=lambda: [
+    levels: list[DPILevel] = field(default_factory=lambda: [
         DPILevel(dpi=400, color=RGBColor(red=255, green=0, blue=0)),
         DPILevel(dpi=800, color=RGBColor(red=0, green=255, blue=0)),
         DPILevel(dpi=1600, color=RGBColor(red=0, green=0, blue=255)),
         DPILevel(dpi=3200, color=RGBColor(red=255, green=255, blue=0)),
         DPILevel(dpi=6400, color=RGBColor(red=255, green=0, blue=255)),
     ])
-    active_level: int = Field(ge=0, le=4, default=1)
-    default_dpi: int = Field(ge=100, le=32000, default=800)
+    active_level: int = 1
+    default_dpi: int = 800
 
 
-class LightingEffect(BaseModel):
+@dataclass
+class LightingEffect:
     """Lighting effect configuration."""
 
-    effect_type: str = Field(default="static")  # static, breathing, cycle, wave, off
-    color: RGBColor = Field(default_factory=RGBColor)
-    speed: int = Field(ge=1, le=100, default=50)
-    brightness: int = Field(ge=0, le=100, default=100)
+    effect_type: str = "static"  # static, breathing, cycle, wave, off
+    color: RGBColor = field(default_factory=RGBColor)
+    speed: int = 50
+    brightness: int = 100
 
 
-class LightingSettings(BaseModel):
+@dataclass
+class LightingSettings:
     """Lighting settings for a device."""
 
     enabled: bool = True
-    effect: LightingEffect = Field(default_factory=LightingEffect)
-    zones: dict[str, LightingEffect] = Field(default_factory=dict)
+    effect: LightingEffect = field(default_factory=LightingEffect)
+    zones: dict[str, LightingEffect] = field(default_factory=dict)
 
 
-class MacroAction(BaseModel):
+@dataclass
+class MacroAction:
     """A single action in a macro."""
 
     action_type: str  # keypress, keydown, keyup, delay, mouse_click, mouse_move
     value: Any  # Key code, delay in ms, mouse button, etc.
-    modifiers: list[str] = Field(default_factory=list)  # ctrl, shift, alt, meta
+    modifiers: list[str] = field(default_factory=list)  # ctrl, shift, alt, meta
 
 
-class Macro(BaseModel):
+@dataclass
+class Macro:
     """Macro definition."""
 
     name: str
-    actions: list[MacroAction] = Field(default_factory=list)
-    repeat_count: int = Field(ge=1, default=1)
+    actions: list[MacroAction] = field(default_factory=list)
+    repeat_count: int = 1
     repeat_while_held: bool = False
 
 
-class ButtonBinding(BaseModel):
+@dataclass
+class ButtonBinding:
     """Button binding configuration."""
 
     button_id: int
@@ -118,17 +133,19 @@ class ButtonBinding(BaseModel):
     custom_key: str | None = None
 
 
-class DeviceProfile(BaseModel):
+@dataclass
+class DeviceProfile:
     """Profile for a specific device."""
 
     name: str = "Default"
-    dpi_settings: DPISettings = Field(default_factory=DPISettings)
-    lighting_settings: LightingSettings = Field(default_factory=LightingSettings)
-    button_bindings: list[ButtonBinding] = Field(default_factory=list)
-    macros: list[Macro] = Field(default_factory=list)
+    dpi_settings: DPISettings = field(default_factory=DPISettings)
+    lighting_settings: LightingSettings = field(default_factory=LightingSettings)
+    button_bindings: list[ButtonBinding] = field(default_factory=list)
+    macros: list[Macro] = field(default_factory=list)
 
 
-class ApplicationProfile(BaseModel):
+@dataclass
+class ApplicationProfile:
     """Application-specific profile assignment."""
 
     app_name: str
@@ -136,19 +153,21 @@ class ApplicationProfile(BaseModel):
     profile_name: str
 
 
-class DeviceConfig(BaseModel):
+@dataclass
+class DeviceConfig:
     """Configuration for a specific device."""
 
     device_id: str  # vendor_id:product_id:serial
     device_name: str
-    profiles: list[DeviceProfile] = Field(
+    profiles: list[DeviceProfile] = field(
         default_factory=lambda: [DeviceProfile(name="Default")]
     )
     active_profile: int = 0
-    app_profiles: list[ApplicationProfile] = Field(default_factory=list)
+    app_profiles: list[ApplicationProfile] = field(default_factory=list)
 
 
-class GlobalConfig(BaseModel):
+@dataclass
+class GlobalConfig:
     """Global application configuration."""
 
     version: str = "1.0"
@@ -160,18 +179,56 @@ class GlobalConfig(BaseModel):
     theme: str = "system"  # system, light, dark
 
 
-class AppConfig(BaseModel):
+def _from_dict(cls: type, data: dict) -> Any:
+    """Recursively reconstruct a dataclass from a dict.
+
+    Handles nested dataclasses, lists of dataclasses, and dicts of dataclasses
+    by inspecting type hints.  This is the stdlib equivalent of pydantic's
+    ``model_validate``.
+    """
+    from typing import get_args, get_origin
+
+    if not hasattr(cls, "__dataclass_fields__"):
+        return data
+
+    field_types = {}
+    for f_name, f_def in cls.__dataclass_fields__.items():
+        field_types[f_name] = f_def.type
+
+    kwargs = {}
+    for f_name in field_types:
+        if f_name not in data:
+            continue
+        val = data[f_name]
+        ftype = field_types[f_name]
+        origin = get_origin(ftype)
+        args = get_args(ftype)
+
+        if origin is list and args and hasattr(args[0], "__dataclass_fields__"):
+            kwargs[f_name] = [_from_dict(args[0], item) for item in val]
+        elif origin is dict and args and len(args) == 2 and hasattr(args[1], "__dataclass_fields__"):
+            kwargs[f_name] = {k: _from_dict(args[1], v) for k, v in val.items()}
+        elif hasattr(ftype, "__dataclass_fields__"):
+            kwargs[f_name] = _from_dict(ftype, val)
+        else:
+            kwargs[f_name] = val
+
+    return cls(**kwargs)
+
+
+@dataclass
+class AppConfig:
     """Complete application configuration."""
 
-    global_config: GlobalConfig = Field(default_factory=GlobalConfig)
-    devices: dict[str, DeviceConfig] = Field(default_factory=dict)
+    global_config: GlobalConfig = field(default_factory=GlobalConfig)
+    devices: dict[str, DeviceConfig] = field(default_factory=dict)
 
     def save(self, path: Path | None = None) -> None:
         """Save configuration to file."""
         if path is None:
             path = get_config_dir() / "config.json"
         with open(path, "w") as f:
-            json.dump(self.model_dump(), f, indent=2)
+            json.dump(asdict(self), f, indent=2)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppConfig":
@@ -182,7 +239,7 @@ class AppConfig(BaseModel):
             return cls()
         with open(path) as f:
             data = json.load(f)
-        return cls.model_validate(data)
+        return _from_dict(cls, data)
 
     def get_device_config(self, device_id: str) -> DeviceConfig | None:
         """Get configuration for a specific device."""
