@@ -282,3 +282,97 @@ def test_cli_profile_switch_help():
     with pytest.raises(SystemExit) as exc:
         main(["profile", "switch", "--help"])
     assert exc.value.code == 0
+
+
+def test_cli_profile_create(mock_manager, monkeypatch, capsys):
+    """Test 'profile create' creates a new profile."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "create", "046d:407f:mock123", "Gaming"])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Gaming" in captured.out
+
+
+def test_cli_profile_create_duplicate(mock_manager, monkeypatch):
+    """Test 'profile create' with duplicate name exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "create", "046d:407f:mock123", "Default"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_create_nonexistent(mock_manager, monkeypatch):
+    """Test 'profile create' on nonexistent device exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "create", "dead:beef:0000", "Gaming"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_rename(mock_manager, monkeypatch, capsys):
+    """Test 'profile rename' renames a profile."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "rename", "046d:407f:mock123", "Default", "Work"])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Work" in captured.out
+
+
+def test_cli_profile_rename_nonexistent(mock_manager, monkeypatch):
+    """Test 'profile rename' with nonexistent profile exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "rename", "046d:407f:mock123", "NoSuch", "Work"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_delete(mock_manager, monkeypatch, capsys):
+    """Test 'profile delete' deletes a profile."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    # First create a second profile so we can delete one
+    with pytest.raises(SystemExit):
+        main(["profile", "create", "046d:407f:mock123", "Gaming"])
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "delete", "046d:407f:mock123", "Gaming"])
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    assert "Gaming" in captured.out
+
+
+def test_cli_profile_delete_last(mock_manager, monkeypatch):
+    """Test 'profile delete' on the only profile exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "delete", "046d:407f:mock123", "Default"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_delete_nonexistent(mock_manager, monkeypatch):
+    """Test 'profile delete' with nonexistent profile exits with code 1."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "delete", "046d:407f:mock123", "NoSuch"])
+    assert exc.value.code == 1
+
+
+def test_cli_profile_create_help():
+    """Test profile create --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "create", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_rename_help():
+    """Test profile rename --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "rename", "--help"])
+    assert exc.value.code == 0
+
+
+def test_cli_profile_delete_help():
+    """Test profile delete --help works."""
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", "delete", "--help"])
+    assert exc.value.code == 0

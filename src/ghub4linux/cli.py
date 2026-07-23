@@ -223,6 +223,88 @@ def cmd_profile_switch(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def cmd_profile_create(args: argparse.Namespace) -> None:
+    """Create a new profile on a device."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    # Check for duplicate name
+    for p in config.profiles:
+        if p.name == args.profile_name:
+            print(f"Profile already exists: {args.profile_name}")
+            sys.exit(1)
+
+    from .core.config import DeviceProfile
+
+    config.profiles.append(DeviceProfile(name=args.profile_name))
+    manager.app_config.set_device_config(args.device_id, config)
+    manager.app_config.save()
+    print(f"Created profile: {args.profile_name}")
+
+
+def cmd_profile_rename(args: argparse.Namespace) -> None:
+    """Rename a profile on a device."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    for profile in config.profiles:
+        if profile.name == args.old_name:
+            # Check new name doesn't conflict
+            for p in config.profiles:
+                if p.name == args.new_name:
+                    print(f"Profile already exists: {args.new_name}")
+                    sys.exit(1)
+            profile.name = args.new_name
+            manager.app_config.set_device_config(args.device_id, config)
+            manager.app_config.save()
+            print(f"Renamed profile: {args.old_name} -> {args.new_name}")
+            return
+
+    print(f"Profile not found: {args.old_name}")
+    sys.exit(1)
+
+
+def cmd_profile_delete(args: argparse.Namespace) -> None:
+    """Delete a profile from a device."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    if len(config.profiles) <= 1:
+        print("Cannot delete the last profile.")
+        sys.exit(1)
+
+    for i, profile in enumerate(config.profiles):
+        if profile.name == args.profile_name:
+            config.profiles.pop(i)
+            # Adjust active_profile if needed
+            if config.active_profile >= len(config.profiles):
+                config.active_profile = len(config.profiles) - 1
+            elif config.active_profile > i:
+                config.active_profile -= 1
+            manager.app_config.set_device_config(args.device_id, config)
+            manager.app_config.save()
+            print(f"Deleted profile: {args.profile_name}")
+            return
+
+    print(f"Profile not found: {args.profile_name}")
+    sys.exit(1)
+
+
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
     manager = _setup_manager()
@@ -345,6 +427,22 @@ def _add_profile_subcommands(sub):
     p_switch.add_argument("device_id", help="Device ID")
     p_switch.add_argument("profile_name", help="Profile name to switch to")
     p_switch.set_defaults(func=cmd_profile_switch)
+
+    p_create = sub.add_parser("create", help="Create a new profile")
+    p_create.add_argument("device_id", help="Device ID")
+    p_create.add_argument("profile_name", help="Profile name to create")
+    p_create.set_defaults(func=cmd_profile_create)
+
+    p_rename = sub.add_parser("rename", help="Rename a profile")
+    p_rename.add_argument("device_id", help="Device ID")
+    p_rename.add_argument("old_name", help="Current profile name")
+    p_rename.add_argument("new_name", help="New profile name")
+    p_rename.set_defaults(func=cmd_profile_rename)
+
+    p_delete = sub.add_parser("delete", help="Delete a profile")
+    p_delete.add_argument("device_id", help="Device ID")
+    p_delete.add_argument("profile_name", help="Profile name to delete")
+    p_delete.set_defaults(func=cmd_profile_delete)
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
