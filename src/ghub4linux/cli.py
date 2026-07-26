@@ -275,6 +275,45 @@ def cmd_profile_rename(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def cmd_profile_duplicate(args: argparse.Namespace) -> None:
+    """Duplicate a profile on a device."""
+    from copy import deepcopy
+
+    from .core.config import DeviceProfile
+
+    manager = _setup_manager()
+    manager.scan_devices()
+    device = manager.get_device(args.device_id)
+    if not device:
+        print(f"Device not found: {args.device_id}")
+        sys.exit(1)
+
+    config = device.config
+    for profile in config.profiles:
+        if profile.name == args.profile_name:
+            new_name = args.new_name or f"{profile.name} (Copy)"
+            # Check for duplicate name
+            for p in config.profiles:
+                if p.name == new_name:
+                    print(f"Profile already exists: {new_name}")
+                    sys.exit(1)
+            dup = DeviceProfile(
+                name=new_name,
+                dpi_settings=deepcopy(profile.dpi_settings),
+                lighting_settings=deepcopy(profile.lighting_settings),
+                button_bindings=deepcopy(profile.button_bindings),
+                macros=deepcopy(profile.macros),
+            )
+            config.profiles.append(dup)
+            manager.app_config.set_device_config(args.device_id, config)
+            manager.app_config.save()
+            print(f"Duplicated profile: {profile.name} -> {new_name}")
+            return
+
+    print(f"Profile not found: {args.profile_name}")
+    sys.exit(1)
+
+
 def cmd_profile_delete(args: argparse.Namespace) -> None:
     """Delete a profile from a device."""
     manager = _setup_manager()
@@ -444,6 +483,12 @@ def _add_profile_subcommands(sub):
     p_delete.add_argument("device_id", help="Device ID")
     p_delete.add_argument("profile_name", help="Profile name to delete")
     p_delete.set_defaults(func=cmd_profile_delete)
+
+    p_duplicate = sub.add_parser("duplicate", help="Duplicate a profile")
+    p_duplicate.add_argument("device_id", help="Device ID")
+    p_duplicate.add_argument("profile_name", help="Profile name to duplicate")
+    p_duplicate.add_argument("--name", "-n", dest="new_name", default=None, help="Name for the new profile (default: '<original> (Copy)')")
+    p_duplicate.set_defaults(func=cmd_profile_duplicate)
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
