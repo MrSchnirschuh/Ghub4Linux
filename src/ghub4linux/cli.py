@@ -447,6 +447,60 @@ def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     print(f"Enable with: systemctl --user enable {unit_name}")
 
 
+def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
+    """Copy a profile from one device to another."""
+    from copy import deepcopy
+
+    from .core.config import DeviceProfile
+
+    manager = _setup_manager()
+    manager.scan_devices()
+
+    src_device = manager.get_device(args.source_device)
+    if not src_device:
+        print(f"Source device not found: {args.source_device}")
+        sys.exit(1)
+
+    dst_device = manager.get_device(args.dest_device)
+    if not dst_device:
+        print(f"Destination device not found: {args.dest_device}")
+        sys.exit(1)
+
+    src_config = src_device.config
+    dst_config = dst_device.config
+
+    # Find source profile
+    src_profile = None
+    for p in src_config.profiles:
+        if p.name == args.profile_name:
+            src_profile = p
+            break
+    if not src_profile:
+        print(f"Profile not found on source device: {args.profile_name}")
+        sys.exit(1)
+
+    # Determine destination name
+    dst_name = args.new_name or src_profile.name
+    # Check for duplicate name on destination
+    for p in dst_config.profiles:
+        if p.name == dst_name:
+            print(f"Profile already exists on destination device: {dst_name}")
+            sys.exit(1)
+
+    # Deep copy the profile
+    dup = DeviceProfile(
+        name=dst_name,
+        dpi_settings=deepcopy(src_profile.dpi_settings),
+        lighting_settings=deepcopy(src_profile.lighting_settings),
+        button_bindings=deepcopy(src_profile.button_bindings),
+        macros=deepcopy(src_profile.macros),
+    )
+    dst_config.profiles.append(dup)
+    manager.app_config.set_device_config(args.dest_device, dst_config)
+    manager.app_config.save()
+    print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
+
+
 def _add_profile_subcommands(sub):
     """Add profile export/import/list/switch subcommands to a subparser group."""
     p_export = sub.add_parser("export", help="Export device profiles to JSON")
@@ -489,6 +543,13 @@ def _add_profile_subcommands(sub):
     p_duplicate.add_argument("profile_name", help="Profile name to duplicate")
     p_duplicate.add_argument("--name", "-n", dest="new_name", default=None, help="Name for the new profile (default: '<original> (Copy)')")
     p_duplicate.set_defaults(func=cmd_profile_duplicate)
+
+    p_copy = sub.add_parser("copy-to-device", help="Copy a profile to another device")
+    p_copy.add_argument("source_device", help="Source device ID")
+    p_copy.add_argument("dest_device", help="Destination device ID")
+    p_copy.add_argument("profile_name", help="Profile name to copy")
+    p_copy.add_argument("--name", "-n", dest="new_name", default=None, help="Name on destination (default: same as source)")
+    p_copy.set_defaults(func=cmd_profile_copy_to_device)
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
