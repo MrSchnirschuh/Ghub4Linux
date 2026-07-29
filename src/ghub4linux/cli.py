@@ -7,7 +7,7 @@ Usage:
   ghub4linux-cli dpi <device-id> [--level N] [--dpi N]
   ghub4linux-cli lighting <device-id> [--on|--off] [--effect TYPE] [--brightness N]
 
-Ponytail: argparse over click/typer — zero new deps.
+Ponytail: argparse over click/typer, helpers dedup boilerplate.
 """
 
 import argparse
@@ -19,9 +19,11 @@ import signal
 import subprocess
 import sys
 import time
+from copy import deepcopy
+from dataclasses import asdict
 from typing import NoReturn
 
-from .core.config import AppConfig, DPILevel, LightingEffect
+from .core.config import AppConfig, DeviceConfig, DeviceProfile, DPILevel, LightingEffect, _from_dict
 from .core.device import DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_RECEIVER_HINTS
@@ -44,6 +46,31 @@ def _setup_manager() -> DeviceManager:
     return manager
 
 
+def _find_device(manager: DeviceManager, device_id: str) -> DeviceManager | None:
+    """Resolve device_id, exits with code 1 if not found. Returns manager so callers can chain."""
+    manager.scan_devices()
+    if not manager.get_device(device_id):
+        print(f"Device not found: {device_id}")
+        sys.exit(1)
+    return manager  # convenience for chaining _find_device(...); device = manager.get_device(...)
+
+
+def _save_config(manager: DeviceManager, device_id: str) -> None:
+    """Persist the device config and save to disk."""
+    device = manager.get_device(device_id)
+    if device:
+        manager.app_config.set_device_config(device_id, device.config)
+    manager.app_config.save()
+
+
+def _make_signal_handler() -> callable:
+    """Return a handler factory that sets 'running' flag to False."""
+    def _handler(signum, frame):  # noqa: ARG001
+        _handler.running = False  # type: ignore[attr-defined]
+    _handler.running = True  # type: ignore[attr-defined]
+    return _handler
+
+
 def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
     manager = _setup_manager()
     devices = manager.scan_devices()
@@ -57,11 +84,8 @@ def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
 
 def cmd_info(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
     info = device.info
     if not info:
         print("Device info not available.")
@@ -82,11 +106,8 @@ def cmd_info(args: argparse.Namespace) -> None:
 
 def cmd_battery(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
     battery = device.get_battery_status()
     if battery is None:
         print("Battery status not supported for this device.")
@@ -99,11 +120,8 @@ def cmd_battery(args: argparse.Namespace) -> None:
 
 def cmd_dpi(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
     if not device.has_capability(DeviceCapability.DPI_ADJUSTMENT):
         print("DPI adjustment not supported for this device.")
         return
@@ -125,11 +143,8 @@ def cmd_dpi(args: argparse.Namespace) -> None:
 
 def cmd_lighting(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
     if not device.has_capability(DeviceCapability.RGB_LIGHTING):
         print("RGB lighting not supported for this device.")
         return
@@ -153,13 +168,8 @@ def cmd_lighting(args: argparse.Namespace) -> None:
 def cmd_profile_export(args: argparse.Namespace) -> None:
     """Export device profiles to a JSON file."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
-    from dataclasses import asdict
     data = asdict(device.config)
     output = args.output or f"{device.device_id}_profiles.json"
     with open(output, "w") as f:
@@ -170,32 +180,22 @@ def cmd_profile_export(args: argparse.Namespace) -> None:
 def cmd_profile_import(args: argparse.Namespace) -> None:
     """Import device profiles from a JSON file."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     with open(args.file) as f:
         data = json.load(f)
-
-    from .core.config import DeviceConfig, _from_dict
     imported = _from_dict(DeviceConfig, data)
     device._config = imported
     manager.app_config.set_device_config(args.device_id, imported)
-    manager.app_config.save()
+    _save_config(manager, args.device_id)
     print(f"Imported {len(imported.profiles)} profile(s) for {device.name}")
 
 
 def cmd_profile_list(args: argparse.Namespace) -> None:
     """List all profiles for a device."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
     for i, profile in enumerate(config.profiles):
         marker = " <-- active" if i == config.active_profile else ""
@@ -205,160 +205,143 @@ def cmd_profile_list(args: argparse.Namespace) -> None:
 def cmd_profile_switch(args: argparse.Namespace) -> None:
     """Switch to a named profile on a device."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
     for i, profile in enumerate(config.profiles):
         if profile.name == args.profile_name:
             device.apply_profile(i)
-            manager.app_config.set_device_config(args.device_id, config)
-            manager.app_config.save()
+            _save_config(manager, args.device_id)
             print(f"Switched to profile: {profile.name}")
             return
-
     print(f"Profile not found: {args.profile_name}")
     sys.exit(1)
+
+
+def _find_profile(config, name):
+    """Find a profile by name, print error + exit(1) if not found."""
+    for p in config.profiles:
+        if p.name == name:
+            return p
+    print(f"Profile not found: {name}")
+    sys.exit(1)
+
+
+def _warn_duplicate(config, name):
+    """Exit with code 1 if a profile with *name* already exists."""
+    for p in config.profiles:
+        if p.name == name:
+            print(f"Profile already exists: {name}")
+            sys.exit(1)
 
 
 def cmd_profile_create(args: argparse.Namespace) -> None:
     """Create a new profile on a device."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
-    # Check for duplicate name
-    for p in config.profiles:
-        if p.name == args.profile_name:
-            print(f"Profile already exists: {args.profile_name}")
-            sys.exit(1)
-
-    from .core.config import DeviceProfile
-
+    _warn_duplicate(config, args.profile_name)
     config.profiles.append(DeviceProfile(name=args.profile_name))
-    manager.app_config.set_device_config(args.device_id, config)
-    manager.app_config.save()
+    _save_config(manager, args.device_id)
     print(f"Created profile: {args.profile_name}")
 
 
 def cmd_profile_rename(args: argparse.Namespace) -> None:
     """Rename a profile on a device."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
-    for profile in config.profiles:
-        if profile.name == args.old_name:
-            # Check new name doesn't conflict
-            for p in config.profiles:
-                if p.name == args.new_name:
-                    print(f"Profile already exists: {args.new_name}")
-                    sys.exit(1)
-            profile.name = args.new_name
-            manager.app_config.set_device_config(args.device_id, config)
-            manager.app_config.save()
-            print(f"Renamed profile: {args.old_name} -> {args.new_name}")
-            return
-
-    print(f"Profile not found: {args.old_name}")
-    sys.exit(1)
+    profile = _find_profile(config, args.old_name)
+    _warn_duplicate(config, args.new_name)
+    profile.name = args.new_name
+    _save_config(manager, args.device_id)
+    print(f"Renamed profile: {args.old_name} -> {args.new_name}")
 
 
 def cmd_profile_duplicate(args: argparse.Namespace) -> None:
     """Duplicate a profile on a device."""
-    from copy import deepcopy
-
-    from .core.config import DeviceProfile
-
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
-    for profile in config.profiles:
-        if profile.name == args.profile_name:
-            new_name = args.new_name or f"{profile.name} (Copy)"
-            # Check for duplicate name
-            for p in config.profiles:
-                if p.name == new_name:
-                    print(f"Profile already exists: {new_name}")
-                    sys.exit(1)
-            dup = DeviceProfile(
-                name=new_name,
-                dpi_settings=deepcopy(profile.dpi_settings),
-                lighting_settings=deepcopy(profile.lighting_settings),
-                button_bindings=deepcopy(profile.button_bindings),
-                macros=deepcopy(profile.macros),
-            )
-            config.profiles.append(dup)
-            manager.app_config.set_device_config(args.device_id, config)
-            manager.app_config.save()
-            print(f"Duplicated profile: {profile.name} -> {new_name}")
-            return
-
-    print(f"Profile not found: {args.profile_name}")
-    sys.exit(1)
+    profile = _find_profile(config, args.profile_name)
+    new_name = args.new_name or f"{profile.name} (Copy)"
+    _warn_duplicate(config, new_name)
+    dup = DeviceProfile(
+        name=new_name,
+        dpi_settings=deepcopy(profile.dpi_settings),
+        lighting_settings=deepcopy(profile.lighting_settings),
+        button_bindings=deepcopy(profile.button_bindings),
+        macros=deepcopy(profile.macros),
+    )
+    config.profiles.append(dup)
+    _save_config(manager, args.device_id)
+    print(f"Duplicated profile: {profile.name} -> {new_name}")
 
 
 def cmd_profile_delete(args: argparse.Namespace) -> None:
     """Delete a profile from a device."""
     manager = _setup_manager()
-    manager.scan_devices()
+    _find_device(manager, args.device_id)
     device = manager.get_device(args.device_id)
-    if not device:
-        print(f"Device not found: {args.device_id}")
-        sys.exit(1)
-
     config = device.config
     if len(config.profiles) <= 1:
         print("Cannot delete the last profile.")
         sys.exit(1)
-
     for i, profile in enumerate(config.profiles):
         if profile.name == args.profile_name:
             config.profiles.pop(i)
-            # Adjust active_profile if needed
             if config.active_profile >= len(config.profiles):
                 config.active_profile = len(config.profiles) - 1
             elif config.active_profile > i:
                 config.active_profile -= 1
-            manager.app_config.set_device_config(args.device_id, config)
-            manager.app_config.save()
+            _save_config(manager, args.device_id)
             print(f"Deleted profile: {args.profile_name}")
             return
-
     print(f"Profile not found: {args.profile_name}")
     sys.exit(1)
+
+
+def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
+    """Copy a profile from one device to another."""
+    manager = _setup_manager()
+    manager.scan_devices()
+    src_device = manager.get_device(args.source_device)
+    if not src_device:
+        print(f"Source device not found: {args.source_device}")
+        sys.exit(1)
+    dst_device = manager.get_device(args.dest_device)
+    if not dst_device:
+        print(f"Destination device not found: {args.dest_device}")
+        sys.exit(1)
+    src_config = src_device.config
+    dst_config = dst_device.config
+    src_profile = _find_profile(src_config, args.profile_name)
+    dst_name = args.new_name or src_profile.name
+    _warn_duplicate(dst_config, dst_name)
+    dup = DeviceProfile(
+        name=dst_name,
+        dpi_settings=deepcopy(src_profile.dpi_settings),
+        lighting_settings=deepcopy(src_profile.lighting_settings),
+        button_bindings=deepcopy(src_profile.button_bindings),
+        macros=deepcopy(src_profile.macros),
+    )
+    dst_config.profiles.append(dup)
+    manager.app_config.set_device_config(args.dest_device, dst_config)
+    _save_config(manager, args.dest_device)
+    print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
 
 
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
     manager = _setup_manager()
-    running = True
-
-    def _handle_signal(signum, frame):  # noqa: ARG001
-        nonlocal running
-        running = False
-
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
-
+    handler = _make_signal_handler()
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
     logger.info("ghub4linux daemon starting")
-    while running:
+    while handler.running:  # type: ignore[attr-defined]
         try:
             devices = manager.scan_devices()
             if devices:
@@ -367,9 +350,7 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
                 if device.is_connected:
                     battery = device.get_battery_status()
                     if battery and battery.level < 20:
-                        logger.warning(
-                            "Low battery: %s at %d%%", device.name, battery.level
-                        )
+                        logger.warning("Low battery: %s at %d%%", device.name, battery.level)
         except Exception as e:
             logger.error("Daemon error: %s", e)
         time.sleep(args.interval)
@@ -379,7 +360,6 @@ def cmd_monitor(args: argparse.Namespace) -> None:
     """Monitor device battery levels in real-time."""
     manager = _setup_manager()
     manager.scan_devices()
-
     if args.device_id:
         device = manager.get_device(args.device_id)
         if not device:
@@ -391,19 +371,12 @@ def cmd_monitor(args: argparse.Namespace) -> None:
         if not devices:
             print("No devices found.")
             return
-
-    running = True
-
-    def _handle_signal(signum, frame):  # noqa: ARG001
-        nonlocal running
-        running = False
-
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
-
+    handler = _make_signal_handler()
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
     print(f"{'Device':40} {'Battery':8} {'Status':12} {'Voltage':8}")
     print("-" * 70)
-    while running:
+    while handler.running:  # type: ignore[attr-defined]
         for device in devices:
             if not device.is_connected:
                 continue
@@ -422,179 +395,101 @@ def cmd_monitor(args: argparse.Namespace) -> None:
 
 def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Install the ghub4linux systemd user service."""
-    # Locate the service file relative to the package
     pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_path = os.path.join(pkg_dir, "..", "..", "contrib", "ghub4linux@.service")
     if not os.path.exists(src_path):
-        # Fallback: look relative to the installed package
         src_path = os.path.join(pkg_dir, "contrib", "ghub4linux@.service")
     if not os.path.exists(src_path):
         print("Error: ghub4linux@.service not found", file=sys.stderr)
         sys.exit(1)
-
     user = args.user or os.environ.get("USER", "pandi")
     unit_name = f"ghub4linux@{user}.service"
     dst = os.path.expanduser(f"~/.config/systemd/user/{unit_name}")
-
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     shutil.copy2(src_path, dst)
-
-    subprocess.run(
-        ["systemctl", "--user", "daemon-reload"], capture_output=True, check=False
-    )
+    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
     print(f"Installed: {dst}")
     print(f"Start with: systemctl --user start {unit_name}")
     print(f"Enable with: systemctl --user enable {unit_name}")
 
 
-def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
-    """Copy a profile from one device to another."""
-    from copy import deepcopy
-
-    from .core.config import DeviceProfile
-
-    manager = _setup_manager()
-    manager.scan_devices()
-
-    src_device = manager.get_device(args.source_device)
-    if not src_device:
-        print(f"Source device not found: {args.source_device}")
-        sys.exit(1)
-
-    dst_device = manager.get_device(args.dest_device)
-    if not dst_device:
-        print(f"Destination device not found: {args.dest_device}")
-        sys.exit(1)
-
-    src_config = src_device.config
-    dst_config = dst_device.config
-
-    # Find source profile
-    src_profile = None
-    for p in src_config.profiles:
-        if p.name == args.profile_name:
-            src_profile = p
-            break
-    if not src_profile:
-        print(f"Profile not found on source device: {args.profile_name}")
-        sys.exit(1)
-
-    # Determine destination name
-    dst_name = args.new_name or src_profile.name
-    # Check for duplicate name on destination
-    for p in dst_config.profiles:
-        if p.name == dst_name:
-            print(f"Profile already exists on destination device: {dst_name}")
-            sys.exit(1)
-
-    # Deep copy the profile
-    dup = DeviceProfile(
-        name=dst_name,
-        dpi_settings=deepcopy(src_profile.dpi_settings),
-        lighting_settings=deepcopy(src_profile.lighting_settings),
-        button_bindings=deepcopy(src_profile.button_bindings),
-        macros=deepcopy(src_profile.macros),
-    )
-    dst_config.profiles.append(dup)
-    manager.app_config.set_device_config(args.dest_device, dst_config)
-    manager.app_config.save()
-    print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
-
-
 def _add_profile_subcommands(sub):
     """Add profile export/import/list/switch subcommands to a subparser group."""
-    p_export = sub.add_parser("export", help="Export device profiles to JSON")
-    p_export.add_argument("device_id", help="Device ID")
-    p_export.add_argument("--output", "-o", default=None, help="Output file path")
-    p_export.set_defaults(func=cmd_profile_export)
-
-    p_import = sub.add_parser("import", help="Import device profiles from JSON")
-    p_import.add_argument("device_id", help="Device ID")
-    p_import.add_argument("file", help="JSON file to import")
-    p_import.set_defaults(func=cmd_profile_import)
-
-    p_list = sub.add_parser("list", help="List all profiles for a device")
-    p_list.add_argument("device_id", help="Device ID")
-    p_list.set_defaults(func=cmd_profile_list)
-
-    p_switch = sub.add_parser("switch", help="Switch to a named profile")
-    p_switch.add_argument("device_id", help="Device ID")
-    p_switch.add_argument("profile_name", help="Profile name to switch to")
-    p_switch.set_defaults(func=cmd_profile_switch)
-
-    p_create = sub.add_parser("create", help="Create a new profile")
-    p_create.add_argument("device_id", help="Device ID")
-    p_create.add_argument("profile_name", help="Profile name to create")
-    p_create.set_defaults(func=cmd_profile_create)
-
-    p_rename = sub.add_parser("rename", help="Rename a profile")
-    p_rename.add_argument("device_id", help="Device ID")
-    p_rename.add_argument("old_name", help="Current profile name")
-    p_rename.add_argument("new_name", help="New profile name")
-    p_rename.set_defaults(func=cmd_profile_rename)
-
-    p_delete = sub.add_parser("delete", help="Delete a profile")
-    p_delete.add_argument("device_id", help="Device ID")
-    p_delete.add_argument("profile_name", help="Profile name to delete")
-    p_delete.set_defaults(func=cmd_profile_delete)
-
-    p_duplicate = sub.add_parser("duplicate", help="Duplicate a profile")
-    p_duplicate.add_argument("device_id", help="Device ID")
-    p_duplicate.add_argument("profile_name", help="Profile name to duplicate")
-    p_duplicate.add_argument("--name", "-n", dest="new_name", default=None, help="Name for the new profile (default: '<original> (Copy)')")
-    p_duplicate.set_defaults(func=cmd_profile_duplicate)
-
-    p_copy = sub.add_parser("copy-to-device", help="Copy a profile to another device")
-    p_copy.add_argument("source_device", help="Source device ID")
-    p_copy.add_argument("dest_device", help="Destination device ID")
-    p_copy.add_argument("profile_name", help="Profile name to copy")
-    p_copy.add_argument("--name", "-n", dest="new_name", default=None, help="Name on destination (default: same as source)")
-    p_copy.set_defaults(func=cmd_profile_copy_to_device)
+    for name, help_text, fields in [
+        ("export", "Export device profiles to JSON",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("--output", {"-o"}, {"default": None, "help": "Output file path"})]),
+        ("import", "Import device profiles from JSON",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("file", {}, {"help": "JSON file to import"})]),
+        ("list", "List all profiles for a device",
+         [("device_id", {}, {"help": "Device ID (from list)"})]),
+        ("switch", "Switch to a named profile",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("profile_name", {}, {"help": "Profile name to switch to"})]),
+        ("create", "Create a new profile",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("profile_name", {}, {"help": "Profile name to create"})]),
+        ("rename", "Rename a profile",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("old_name", {}, {"help": "Current profile name"}),
+          ("new_name", {}, {"help": "New profile name"})]),
+        ("delete", "Delete a profile",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("profile_name", {}, {"help": "Profile name to delete"})]),
+        ("duplicate", "Duplicate a profile",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("profile_name", {}, {"help": "Profile name to duplicate"}),
+          ("--name", {"-n"}, {"dest": "new_name", "default": None,
+                              "help": "Name for the new profile (default: '<original> (Copy)')"})]),
+        ("copy-to-device", "Copy a profile to another device",
+         [("source_device", {}, {"help": "Source device ID"}),
+          ("dest_device", {}, {"help": "Destination device ID"}),
+          ("profile_name", {}, {"help": "Profile name to copy"}),
+          ("--name", {"-n"}, {"dest": "new_name", "default": None,
+                              "help": "Name on destination (default: same as source)"})]),
+    ]:
+        p = sub.add_parser(name, help=help_text)
+        for arg_name, flags, kwargs in fields:
+            if isinstance(flags, dict):
+                p.add_argument(arg_name, **kwargs)
+            else:
+                p.add_argument(*flags, arg_name, **kwargs)  # type: ignore[arg-type]
+        p.set_defaults(func=globals()[f"cmd_profile_{name.replace('-', '_')}"])
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
     parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list", help="List connected devices")
-    p_list.set_defaults(func=cmd_list)
+    for name, help_text, fields in [
+        ("list", "List connected devices", []),
+        ("info", "Show device info", [("device_id", {}, {"help": "Device ID (from list)"})]),
+        ("battery", "Show battery status", [("device_id", {}, {"help": "Device ID"})]),
+        ("dpi", "Get/set DPI settings",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("--level", {}, {"type": int, "default": None, "help": "DPI level index (0-based)"}),
+          ("--dpi", {}, {"type": int, "default": None, "help": "DPI value to set"})]),
+        ("lighting", "Get/set lighting settings",
+         [("device_id", {}, {"help": "Device ID"}),
+          ("--on", {}, {"action": "store_true", "default": None, "dest": "on"}),
+          ("--off", {}, {"action": "store_false", "dest": "on"}),
+          ("--effect", {}, {"choices": ["static", "breathing", "cycle", "wave", "off"], "default": None}),
+          ("--brightness", {}, {"type": int, "default": None, "help": "Brightness 0-100"})]),
+        ("daemon", "Run as headless daemon",
+         [("--interval", {}, {"type": int, "default": 60, "help": "Poll interval in seconds (default: 60)"})]),
+        ("install-daemon", "Install systemd user service for headless daemon",
+         [("--user", {}, {"default": None, "help": "Systemd user (default: current user)"})]),
+        ("monitor", "Monitor device battery levels in real-time",
+         [("device_id", {}, {"nargs": "?", "default": None, "help": "Device ID (omit for all devices)"}),
+          ("--interval", {}, {"type": int, "default": 5, "help": "Poll interval in seconds (default: 5)"})]),
+    ]:
+        p = sub.add_parser(name, help=help_text)
+        for arg_name, _, kwargs in fields:
+            p.add_argument(arg_name, **kwargs)
+        p.set_defaults(func=globals()[f"cmd_{name.replace('-', '_')}"])  # type: ignore[arg-type]
 
-    p_info = sub.add_parser("info", help="Show device info")
-    p_info.add_argument("device_id", help="Device ID (from list)")
-    p_info.set_defaults(func=cmd_info)
-
-    p_bat = sub.add_parser("battery", help="Show battery status")
-    p_bat.add_argument("device_id", help="Device ID")
-    p_bat.set_defaults(func=cmd_battery)
-
-    p_dpi = sub.add_parser("dpi", help="Get/set DPI settings")
-    p_dpi.add_argument("device_id", help="Device ID")
-    p_dpi.add_argument("--level", type=int, default=None, help="DPI level index (0-based)")
-    p_dpi.add_argument("--dpi", type=int, default=None, help="DPI value to set")
-    p_dpi.set_defaults(func=cmd_dpi)
-
-    p_light = sub.add_parser("lighting", help="Get/set lighting settings")
-    p_light.add_argument("device_id", help="Device ID")
-    p_light.add_argument("--on", action="store_true", default=None, dest="on")
-    p_light.add_argument("--off", action="store_false", dest="on")
-    p_light.add_argument("--effect", choices=["static", "breathing", "cycle", "wave", "off"], default=None)
-    p_light.add_argument("--brightness", type=int, default=None, help="Brightness 0-100")
-    p_light.set_defaults(func=cmd_lighting)
-
-    p_daemon = sub.add_parser("daemon", help="Run as headless daemon")
-    p_daemon.add_argument("--interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
-    p_daemon.set_defaults(func=cmd_daemon)
-
-    p_install = sub.add_parser("install-daemon", help="Install systemd user service for headless daemon")
-    p_install.add_argument("--user", default=None, help="Systemd user (default: current user)")
-    p_install.set_defaults(func=cmd_install_daemon)
-
-    p_monitor = sub.add_parser("monitor", help="Monitor device battery levels in real-time")
-    p_monitor.add_argument("device_id", nargs="?", default=None, help="Device ID (omit for all devices)")
-    p_monitor.add_argument("--interval", type=int, default=5, help="Poll interval in seconds (default: 5)")
-    p_monitor.set_defaults(func=cmd_monitor)
-
-    p_profile = sub.add_parser("profile", help="Export/import device profiles")
+    p_profile = sub.add_parser("profile", help="Manage device profiles")
     _add_profile_subcommands(p_profile.add_subparsers(dest="profile_command", required=True))
 
     args = parser.parse_args(argv)
