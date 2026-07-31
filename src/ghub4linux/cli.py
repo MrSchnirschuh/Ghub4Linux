@@ -46,13 +46,12 @@ def _setup_manager() -> DeviceManager:
     return manager
 
 
-def _find_device(manager: DeviceManager, device_id: str) -> DeviceManager | None:
-    """Resolve device_id, exits with code 1 if not found. Returns manager so callers can chain."""
+def _find_device(manager: DeviceManager, device_id: str) -> None:
+    """Resolve device_id, exits with code 1 if not found."""
     manager.scan_devices()
     if not manager.get_device(device_id):
         print(f"Device not found: {device_id}")
         sys.exit(1)
-    return manager  # convenience for chaining _find_device(...); device = manager.get_device(...)
 
 
 def _save_config(manager: DeviceManager, device_id: str) -> None:
@@ -63,12 +62,12 @@ def _save_config(manager: DeviceManager, device_id: str) -> None:
     manager.app_config.save()
 
 
-def _make_signal_handler() -> callable:
-    """Return a handler factory that sets 'running' flag to False."""
-    def _handler(signum, frame):  # noqa: ARG001
-        _handler.running = False  # type: ignore[attr-defined]
-    _handler.running = True  # type: ignore[attr-defined]
-    return _handler
+_running = True
+
+
+def _signal_handler(signum, frame):  # noqa: ARG001
+    global _running
+    _running = False
 
 
 def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
@@ -337,11 +336,10 @@ def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
     manager = _setup_manager()
-    handler = _make_signal_handler()
-    signal.signal(signal.SIGTERM, handler)
-    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
     logger.info("ghub4linux daemon starting")
-    while handler.running:  # type: ignore[attr-defined]
+    while _running:
         try:
             devices = manager.scan_devices()
             if devices:
@@ -371,12 +369,11 @@ def cmd_monitor(args: argparse.Namespace) -> None:
         if not devices:
             print("No devices found.")
             return
-    handler = _make_signal_handler()
-    signal.signal(signal.SIGTERM, handler)
-    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
     print(f"{'Device':40} {'Battery':8} {'Status':12} {'Voltage':8}")
     print("-" * 70)
-    while handler.running:  # type: ignore[attr-defined]
+    while _running:
         for device in devices:
             if not device.is_connected:
                 continue
