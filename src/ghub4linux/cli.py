@@ -23,7 +23,14 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import NoReturn
 
-from .core.config import AppConfig, DeviceConfig, DeviceProfile, DPILevel, LightingEffect, _from_dict
+from .core.config import (
+    AppConfig,
+    DeviceConfig,
+    DeviceProfile,
+    DPILevel,
+    LightingEffect,
+    _from_dict,
+)
 from .core.device import DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_RECEIVER_HINTS

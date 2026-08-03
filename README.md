@@ -52,7 +52,7 @@ ghub4linux
 #### 1. Install system dependencies
 
 ```bash
-sudo pacman -S python python-gobject python-pydantic gtk4 libadwaita hidapi
+sudo pacman -S python python-gobject gtk4 libadwaita hidapi
 ```
 
 #### 2. Clone the repository
@@ -82,7 +82,7 @@ bash install.sh
 sudo apt install \
     python3 python3-venv python3-gi python3-gi-cairo \
     gir1.2-gtk-4.0 gir1.2-adw-1 \
-    libhidapi-hidraw0 python3-pydantic
+    libhidapi-hidraw0
 ```
 
 #### 2. Clone the repository

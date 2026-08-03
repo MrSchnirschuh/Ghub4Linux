@@ -3,7 +3,7 @@
 import pytest
 
 from ghub4linux.cli import main
-from ghub4linux.core.config import AppConfig, DeviceConfig, DeviceProfile
+from ghub4linux.core.config import AppConfig
 from ghub4linux.core.device import DeviceManager
 from ghub4linux.core.hid import HIDDevice
 
