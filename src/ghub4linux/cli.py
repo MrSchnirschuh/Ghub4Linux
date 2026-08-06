@@ -23,6 +23,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from typing import NoReturn
 
+from . import __version__
 from .core.config import (
     AppConfig,
     DeviceConfig,
@@ -464,6 +465,7 @@ def _add_profile_subcommands(sub):
 
 def main(argv: list[str] | None = None) -> NoReturn:
     parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name, help_text, fields in [

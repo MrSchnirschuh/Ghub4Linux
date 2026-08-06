@@ -1,5 +1,6 @@
 """Main entry point for ghub4linux application."""
 
+import argparse
 import logging
 import sys
 from typing import Any
@@ -11,6 +12,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, Gtk  # noqa: E402
 
+from . import __version__  # noqa: E402
 from .core.config import AppConfig  # noqa: E402
 from .gui.main_window import MainWindow  # noqa: E402
 
@@ -142,6 +144,9 @@ class Ghub4LinuxApplication(Adw.Application):
 
 def main() -> int:
     """Main entry point."""
+    parser = argparse.ArgumentParser(prog="ghub4linux")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.parse_args()
     app = Ghub4LinuxApplication()
     return app.run(sys.argv)
 
