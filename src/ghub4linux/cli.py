@@ -138,6 +138,7 @@ def cmd_dpi(args: argparse.Namespace) -> None:
         if 0 <= level_idx < len(settings.levels):
             settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
             device.set_dpi_settings(settings)
+            _save_config(manager, args.device_id)
             print(f"Set DPI level {level_idx + 1} to {args.dpi}")
         else:
             print(f"Invalid level: {level_idx}")
@@ -159,10 +160,12 @@ def cmd_lighting(args: argparse.Namespace) -> None:
     if args.on is not None:
         settings.enabled = args.on
         device.set_lighting_settings(settings)
+        _save_config(manager, args.device_id)
         print(f"Lighting {'enabled' if args.on else 'disabled'}")
     elif args.effect is not None:
         settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
         device.set_lighting_settings(settings)
+        _save_config(manager, args.device_id)
         print(f"Set effect: {args.effect}")
     else:
         print(f"Enabled:    {settings.enabled}")
