@@ -39,7 +39,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.device_manager.register_device_class(pid, cls)
 
         # Register hint-based entries for shared Lightspeed receiver PIDs
-        for pid, hint, cls in [
+        for pid, hint, cls in [  # type: ignore[assignment]
             *G502_RECEIVER_HINTS,
             *PRO_DEX_2_RECEIVER_HINTS,
             *POWERPLAY_RECEIVER_HINTS,

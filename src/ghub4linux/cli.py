@@ -32,7 +32,7 @@ from .core.config import (
     LightingEffect,
     _from_dict,
 )
-from .core.device import DeviceCapability, DeviceManager
+from .core.device import BaseDevice, DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_RECEIVER_HINTS
 from .devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
@@ -45,7 +45,7 @@ def _setup_manager() -> DeviceManager:
     manager = DeviceManager(config)
     for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
         manager.register_device_class(pid, cls)
-    for pid, hint, cls in [
+    for pid, hint, cls in [  # type: ignore[assignment]
         *G502_RECEIVER_HINTS,
         *PRO_DEX_2_RECEIVER_HINTS,
         *POWERPLAY_RECEIVER_HINTS,
@@ -54,12 +54,14 @@ def _setup_manager() -> DeviceManager:
     return manager
 
 
-def _find_device(manager: DeviceManager, device_id: str) -> None:
-    """Resolve device_id, exits with code 1 if not found."""
+def _find_device(manager: DeviceManager, device_id: str) -> BaseDevice:
+    """Resolve device_id, exits with code 1 if not found. Returns the device."""
     manager.scan_devices()
-    if not manager.get_device(device_id):
+    device = manager.get_device(device_id)
+    if not device:
         print(f"Device not found: {device_id}")
         sys.exit(1)
+    return device
 
 
 def _save_config(manager: DeviceManager, device_id: str) -> None:
@@ -91,8 +93,7 @@ def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
 
 def cmd_info(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     info = device.info
     if not info:
         print("Device info not available.")
@@ -113,8 +114,7 @@ def cmd_info(args: argparse.Namespace) -> None:
 
 def cmd_battery(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     battery = device.get_battery_status()
     if battery is None:
         print("Battery status not supported for this device.")
@@ -127,8 +127,7 @@ def cmd_battery(args: argparse.Namespace) -> None:
 
 def cmd_dpi(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     if not device.has_capability(DeviceCapability.DPI_ADJUSTMENT):
         print("DPI adjustment not supported for this device.")
         return
@@ -151,8 +150,7 @@ def cmd_dpi(args: argparse.Namespace) -> None:
 
 def cmd_lighting(args: argparse.Namespace) -> None:
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     if not device.has_capability(DeviceCapability.RGB_LIGHTING):
         print("RGB lighting not supported for this device.")
         return
@@ -178,8 +176,7 @@ def cmd_lighting(args: argparse.Namespace) -> None:
 def cmd_profile_export(args: argparse.Namespace) -> None:
     """Export device profiles to a JSON file."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     data = asdict(device.config)
     output = args.output or f"{device.device_id}_profiles.json"
     with open(output, "w") as f:
@@ -190,8 +187,7 @@ def cmd_profile_export(args: argparse.Namespace) -> None:
 def cmd_profile_import(args: argparse.Namespace) -> None:
     """Import device profiles from a JSON file."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     with open(args.file) as f:
         data = json.load(f)
     imported = _from_dict(DeviceConfig, data)
@@ -204,8 +200,7 @@ def cmd_profile_import(args: argparse.Namespace) -> None:
 def cmd_profile_list(args: argparse.Namespace) -> None:
     """List all profiles for a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     for i, profile in enumerate(config.profiles):
         marker = " <-- active" if i == config.active_profile else ""
@@ -215,8 +210,7 @@ def cmd_profile_list(args: argparse.Namespace) -> None:
 def cmd_profile_switch(args: argparse.Namespace) -> None:
     """Switch to a named profile on a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     for i, profile in enumerate(config.profiles):
         if profile.name == args.profile_name:
@@ -248,8 +242,7 @@ def _warn_duplicate(config, name):
 def cmd_profile_create(args: argparse.Namespace) -> None:
     """Create a new profile on a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     _warn_duplicate(config, args.profile_name)
     config.profiles.append(DeviceProfile(name=args.profile_name))
@@ -260,8 +253,7 @@ def cmd_profile_create(args: argparse.Namespace) -> None:
 def cmd_profile_rename(args: argparse.Namespace) -> None:
     """Rename a profile on a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     profile = _find_profile(config, args.old_name)
     _warn_duplicate(config, args.new_name)
@@ -273,8 +265,7 @@ def cmd_profile_rename(args: argparse.Namespace) -> None:
 def cmd_profile_duplicate(args: argparse.Namespace) -> None:
     """Duplicate a profile on a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     profile = _find_profile(config, args.profile_name)
     new_name = args.new_name or f"{profile.name} (Copy)"
@@ -294,8 +285,7 @@ def cmd_profile_duplicate(args: argparse.Namespace) -> None:
 def cmd_profile_delete(args: argparse.Namespace) -> None:
     """Delete a profile from a device."""
     manager = _setup_manager()
-    _find_device(manager, args.device_id)
-    device = manager.get_device(args.device_id)
+    device = _find_device(manager, args.device_id)
     config = device.config
     if len(config.profiles) <= 1:
         print("Cannot delete the last profile.")
@@ -494,7 +484,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
           ("--interval", {}, {"type": int, "default": 5, "help": "Poll interval in seconds (default: 5)"})]),
     ]:
         p = sub.add_parser(name, help=help_text)
-        for arg_name, _, kwargs in fields:
+        for arg_name, _, kwargs in fields:  # type: ignore[attr-defined]
             p.add_argument(arg_name, **kwargs)
         p.set_defaults(func=globals()[f"cmd_{name.replace('-', '_')}"])  # type: ignore[arg-type]
 

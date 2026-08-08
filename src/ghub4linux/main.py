@@ -148,7 +148,7 @@ def main() -> int:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.parse_args()
     app = Ghub4LinuxApplication()
-    return app.run(sys.argv)
+    return int(app.run(sys.argv))
 
 
 if __name__ == "__main__":

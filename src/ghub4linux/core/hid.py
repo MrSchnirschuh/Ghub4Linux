@@ -96,7 +96,7 @@ class HIDConnection:
         if not self._handle:
             raise HIDError("Device not open")
         try:
-            return self._handle.write(data)
+            return int(self._handle.write(data))
         except Exception as e:
             raise HIDError(f"Failed to write to device: {e}") from e
 

@@ -207,7 +207,7 @@ def _from_dict(cls: type, data: dict) -> Any:
         if origin is list and args and hasattr(args[0], "__dataclass_fields__"):
             kwargs[f_name] = [_from_dict(args[0], item) for item in val]
         elif origin is dict and args and len(args) == 2 and hasattr(args[1], "__dataclass_fields__"):
-            kwargs[f_name] = {k: _from_dict(args[1], v) for k, v in val.items()}
+            kwargs[f_name] = {k: _from_dict(args[1], v) for k, v in val.items()}  # type: ignore[assignment]
         elif hasattr(ftype, "__dataclass_fields__"):
             kwargs[f_name] = _from_dict(ftype, val)
         else:
@@ -239,7 +239,7 @@ class AppConfig:
             return cls()
         with open(path) as f:
             data = json.load(f)
-        return _from_dict(cls, data)
+        return _from_dict(cls, data)  # type: ignore[no-any-return]
 
     def get_device_config(self, device_id: str) -> DeviceConfig | None:
         """Get configuration for a specific device."""
