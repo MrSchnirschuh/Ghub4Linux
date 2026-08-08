@@ -173,69 +173,12 @@ class MainWindow(Adw.ApplicationWindow):
         devices = self.device_manager.scan_devices()
         logger.info(f"Device scan complete: {len(devices)} new device(s) found")
 
-        if not devices:
-            # Add placeholder for demo/testing
-            self._add_demo_devices()
-        else:
-            for device in devices:
-                logger.info(f"  {device.name}: {'connected' if device.is_connected else 'not connected'}")
-                row = DeviceRow(device)
-                self.device_list.append(row)
-
-        return False
-
-    def _add_demo_devices(self) -> None:
-        """Add demo devices for testing without hardware."""
-        from ..core.hid import HIDDevice
-
-        # Create mock devices for demonstration
-        demo_devices = [
-            HIDDevice(
-                vendor_id=0x046D,
-                product_id=0x407F,
-                serial_number="demo001",
-                manufacturer="Logitech",
-                product="G502 Lightspeed",
-                path=b"/dev/demo1",
-                interface_number=0,
-                usage_page=0xFF00,
-                usage=0x0001,
-            ),
-            HIDDevice(
-                vendor_id=0x046D,
-                product_id=0x4099,
-                serial_number="demo002",
-                manufacturer="Logitech",
-                product="G502 X Plus",
-                path=b"/dev/demo2",
-                interface_number=0,
-                usage_page=0xFF00,
-                usage=0x0001,
-            ),
-            HIDDevice(
-                vendor_id=0x046D,
-                product_id=0xC53A,
-                serial_number="demo003",
-                manufacturer="Logitech",
-                product="Powerplay Wireless Charging System",
-                path=b"/dev/demo3",
-                interface_number=0,
-                usage_page=0xFF00,
-                usage=0x0001,
-            ),
-        ]
-
-        from ..devices.g502 import G502Lightspeed, G502XPlus
-        from ..devices.powerplay import Powerplay
-
-        device_classes = [G502Lightspeed, G502XPlus, Powerplay]
-
-        for hid_dev, dev_cls in zip(demo_devices, device_classes, strict=True):
-            device = dev_cls(hid_dev)
-            device._info = device.get_device_info()
-            self.device_manager.add_device(device)
+        for device in devices:
+            logger.info(f"  {device.name}: {'connected' if device.is_connected else 'not connected'}")
             row = DeviceRow(device)
             self.device_list.append(row)
+
+        return False
 
     def _on_device_selected(
         self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None

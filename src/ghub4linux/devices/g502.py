@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 # G502 Product IDs
+G502_HERO_PID = 0xC092  # G502 Hero wired
 G502_LIGHTSPEED_PID = 0x407F  # G502 Lightspeed wireless
 G502_LIGHTSPEED_WIRED_PID = 0x407E  # G502 Lightspeed wired mode
 G502X_PLUS_PID = 0x4099  # G502X Plus
@@ -281,6 +282,19 @@ class G502Lightspeed(G502Device):
         )
 
 
+class G502Hero(G502Device):
+    """G502 Hero specific implementation (wired)."""
+
+    MAX_DPI = 25600
+
+    def get_device_info(self) -> DeviceInfo:
+        """Get device information."""
+        return self._make_device_info(
+            name="G502 Hero",
+            model="G502 Hero",
+        )
+
+
 class G502XPlus(G502Device):
     """G502X Plus specific implementation."""
 
@@ -322,6 +336,7 @@ class G502XPlus(G502Device):
 
 # Device registry mapping
 G502_DEVICES = {
+    G502_HERO_PID: G502Hero,
     G502_LIGHTSPEED_PID: G502Lightspeed,
     G502_LIGHTSPEED_WIRED_PID: G502Lightspeed,
     G502X_PLUS_PID: G502XPlus,

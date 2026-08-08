@@ -254,3 +254,31 @@ class TestDeviceManager:
         manager.remove_device(device.device_id)
 
         assert device.device_id not in manager._devices
+
+    def test_g502_hero_registered(self):
+        """G502 Hero (0xC092) is registered so it can be detected (issue #9)."""
+        from ghub4linux.devices.g502 import G502_DEVICES, G502_HERO_PID, G502Hero
+
+        assert G502_HERO_PID == 0xC092
+        assert G502_DEVICES.get(G502_HERO_PID) is G502Hero
+
+    def test_scan_returns_no_phantom_devices(self, monkeypatch):
+        """Scan with zero HID devices must return nothing — no hardcoded demo
+        devices are injected (regression for issue #9 phantom-device report)."""
+        from ghub4linux.core import hid as hid_module
+        from ghub4linux.core.config import AppConfig
+        from ghub4linux.devices.g502 import G502_DEVICES
+
+        class EmptyHIDManager:
+            def find_logitech_devices(self):
+                return []
+
+        monkeypatch.setattr(hid_module, "HIDManager", EmptyHIDManager)
+        manager = DeviceManager(AppConfig())
+        manager._hid_manager = EmptyHIDManager()
+        for pid, cls in G502_DEVICES.items():
+            manager.register_device_class(pid, cls)
+
+        devices = manager.scan_devices()
+
+        assert devices == []
