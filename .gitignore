@@ -76,3 +76,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# graphify persistent knowledge graph output
+/graphify-out/
