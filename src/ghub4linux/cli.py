@@ -19,7 +19,6 @@ import signal
 import subprocess
 import sys
 import time
-from copy import deepcopy
 from dataclasses import asdict
 from typing import NoReturn
 
@@ -270,14 +269,7 @@ def cmd_profile_duplicate(args: argparse.Namespace) -> None:
     profile = _find_profile(config, args.profile_name)
     new_name = args.new_name or f"{profile.name} (Copy)"
     _warn_duplicate(config, new_name)
-    dup = DeviceProfile(
-        name=new_name,
-        dpi_settings=deepcopy(profile.dpi_settings),
-        lighting_settings=deepcopy(profile.lighting_settings),
-        button_bindings=deepcopy(profile.button_bindings),
-        macros=deepcopy(profile.macros),
-    )
-    config.profiles.append(dup)
+    config.profiles.append(profile.copy(new_name))
     _save_config(manager, args.device_id)
     print(f"Duplicated profile: {profile.name} -> {new_name}")
 
@@ -321,14 +313,7 @@ def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
     src_profile = _find_profile(src_config, args.profile_name)
     dst_name = args.new_name or src_profile.name
     _warn_duplicate(dst_config, dst_name)
-    dup = DeviceProfile(
-        name=dst_name,
-        dpi_settings=deepcopy(src_profile.dpi_settings),
-        lighting_settings=deepcopy(src_profile.lighting_settings),
-        button_bindings=deepcopy(src_profile.button_bindings),
-        macros=deepcopy(src_profile.macros),
-    )
-    dst_config.profiles.append(dup)
+    dst_config.profiles.append(src_profile.copy(dst_name))
     manager.app_config.set_device_config(args.dest_device, dst_config)
     _save_config(manager, args.dest_device)
     print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")

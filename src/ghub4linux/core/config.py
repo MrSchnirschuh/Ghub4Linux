@@ -8,6 +8,7 @@ Ponytail: stdlib dataclasses over pydantic — no external dep for config models
 
 import json
 import os
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -142,6 +143,16 @@ class DeviceProfile:
     lighting_settings: LightingSettings = field(default_factory=LightingSettings)
     button_bindings: list[ButtonBinding] = field(default_factory=list)
     macros: list[Macro] = field(default_factory=list)
+
+    def copy(self, name: str) -> "DeviceProfile":
+        """Deep-copy this profile under a new name (all mutable fields duplicated)."""
+        return DeviceProfile(
+            name=name,
+            dpi_settings=deepcopy(self.dpi_settings),
+            lighting_settings=deepcopy(self.lighting_settings),
+            button_bindings=deepcopy(self.button_bindings),
+            macros=deepcopy(self.macros),
+        )
 
 
 @dataclass

@@ -188,21 +188,12 @@ class ProfilePanel(Gtk.Box):
 
     def _on_duplicate(self, _button: Gtk.Button) -> None:
         """Duplicate current profile."""
-        from copy import deepcopy
-
         config = self.device.config
         if not config.profiles:
             return
         src = config.profiles[config.active_profile]
 
-        dup = DeviceProfile(
-            name=f"{src.name} (Copy)",
-            dpi_settings=deepcopy(src.dpi_settings),
-            lighting_settings=deepcopy(src.lighting_settings),
-            button_bindings=deepcopy(src.button_bindings),
-            macros=deepcopy(src.macros),
-        )
-        config.profiles.append(dup)
+        config.profiles.append(src.copy(f"{src.name} (Copy)"))
         self._refresh_profile_combo()
         self.device.apply_profile(len(config.profiles) - 1)
         self.get_root().show_toast(f"Profile '{src.name}' duplicated")

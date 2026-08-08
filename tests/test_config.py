@@ -7,6 +7,7 @@ import pytest
 
 from ghub4linux.core.config import (
     AppConfig,
+    ButtonBinding,
     DeviceConfig,
     DeviceProfile,
     DPILevel,
@@ -162,6 +163,29 @@ class TestDeviceConfig:
         )
         assert len(config.profiles) == 3
         assert config.active_profile == 1
+
+    def test_copy_deep_copies_mutable_fields(self):
+        """Test DeviceProfile.copy deep-copies mutable fields, keeping name distinct."""
+        profile = DeviceProfile(
+            name="Gaming",
+            dpi_settings=DPISettings(),
+            lighting_settings=LightingSettings(),
+            button_bindings=[
+                ButtonBinding(button_id=5, action_type="keypress", custom_key="a")
+            ],
+            macros=[Macro(name="M", actions=[MacroAction(action_type="keypress", value="b")])],
+        )
+        dup = profile.copy("Gaming (Copy)")
+
+        assert dup.name == "Gaming (Copy)"
+        assert profile.name == "Gaming"
+        # Mutable fields are independent copies, not shared references
+        dup.dpi_settings.levels[0].dpi = 999
+        assert profile.dpi_settings.levels[0].dpi != 999
+        dup.button_bindings[0].custom_key = "z"
+        assert profile.button_bindings[0].custom_key == "a"
+        dup.macros[0].actions[0].value = "q"
+        assert profile.macros[0].actions[0].value == "b"
 
 
 class TestAppConfig:
