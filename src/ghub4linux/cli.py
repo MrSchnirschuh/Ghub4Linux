@@ -79,8 +79,37 @@ def _signal_handler(signum, frame):  # noqa: ARG001
     _running = False
 
 
-def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
-    manager = _setup_manager()
+def _with_device(
+    func: Callable[[DeviceManager, BaseDevice, argparse.Namespace], None]
+) -> Callable[[argparse.Namespace], None]:
+    """Ponytail: decorator that supplies manager+device and persists config.
+
+    Tests can still monkeypatch `ghub4linux.cli._setup_manager`.
+    """
+
+    def wrapper(args: argparse.Namespace) -> None:
+        manager = _setup_manager()
+        device = _find_device(manager, args.device_id)
+        func(manager, device, args)
+        _save_config(manager, args.device_id)
+
+    return wrapper
+
+
+def _with_manager(
+    func: Callable[[DeviceManager, argparse.Namespace], None]
+) -> Callable[[argparse.Namespace], None]:
+    """Ponytail: decorator that supplies a configured manager."""
+
+    def wrapper(args: argparse.Namespace) -> None:
+        manager = _setup_manager()
+        func(manager, args)
+
+    return wrapper
+
+
+@_with_manager
+def cmd_list(manager: DeviceManager, args: argparse.Namespace) -> None:  # noqa: ARG001
     devices = manager.scan_devices()
     if not devices:
         print("No devices found.")
@@ -90,9 +119,8 @@ def cmd_list(args: argparse.Namespace) -> None:  # noqa: ARG001
         print(f"{d.device_id:40} {d.name:25} {conn}")
 
 
-def cmd_info(args: argparse.Namespace) -> None:
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
+@_with_device
+def cmd_info(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     info = device.info
     if not info:
         print("Device info not available.")
@@ -126,9 +154,8 @@ def cmd_info(args: argparse.Namespace) -> None:
     print(f"Capabilities:   {', '.join(data['capabilities'])}")
 
 
-def cmd_battery(args: argparse.Namespace) -> None:
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
+@_with_device
+def cmd_battery(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     battery = device.get_battery_status()
     if battery is None:
         if args.json:
@@ -150,9 +177,8 @@ def cmd_battery(args: argparse.Namespace) -> None:
         print(f"Voltage: {data['voltage']:.3f}V")
 
 
-def cmd_dpi(args: argparse.Namespace) -> None:
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
+@_with_device
+def cmd_dpi(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     if not device.has_capability(DeviceCapability.DPI_ADJUSTMENT):
         if args.json:
             print(json.dumps({"error": "DPI adjustment not supported for this device."}))
@@ -165,7 +191,6 @@ def cmd_dpi(args: argparse.Namespace) -> None:
         if 0 <= level_idx < len(settings.levels):
             settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
             device.set_dpi_settings(settings)
-            _save_config(manager, args.device_id)
             if args.json:
                 print(json.dumps({"level": level_idx + 1, "dpi": args.dpi}))
                 return
@@ -194,9 +219,8 @@ def cmd_dpi(args: argparse.Namespace) -> None:
             print(f"  Level {item['level']}: {item['dpi']} DPI  #{item['color']}{marker}")
 
 
-def cmd_lighting(args: argparse.Namespace) -> None:
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
+@_with_device
+def cmd_lighting(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     if not device.has_capability(DeviceCapability.RGB_LIGHTING):
         if args.json:
             print(json.dumps({"error": "RGB lighting not supported for this device."}))
@@ -207,7 +231,6 @@ def cmd_lighting(args: argparse.Namespace) -> None:
     if args.on is not None:
         settings.enabled = args.on
         device.set_lighting_settings(settings)
-        _save_config(manager, args.device_id)
         if args.json:
             print(json.dumps({"enabled": args.on}))
             return
@@ -215,7 +238,6 @@ def cmd_lighting(args: argparse.Namespace) -> None:
     elif args.effect is not None:
         settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
         device.set_lighting_settings(settings)
-        _save_config(manager, args.device_id)
         if args.json:
             print(json.dumps({"effect": args.effect, "brightness": settings.effect.brightness}))
             return
@@ -238,10 +260,9 @@ def cmd_lighting(args: argparse.Namespace) -> None:
         print(f"Color:      #{data['color']}")
 
 
-def cmd_profile_export(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_export(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Export device profiles to a JSON file."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
     data = asdict(device.config)
     output = args.output or f"{device.device_id}_profiles.json"
     with open(output, "w") as f:
@@ -249,23 +270,20 @@ def cmd_profile_export(args: argparse.Namespace) -> None:
     print(f"Exported {len(data['profiles'])} profile(s) to {output}")
 
 
-def cmd_profile_import(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_import(manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Import device profiles from a JSON file."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
     with open(args.file) as f:
         data = json.load(f)
     imported = _from_dict(DeviceConfig, data)
     device._config = imported
     manager.app_config.set_device_config(args.device_id, imported)
-    _save_config(manager, args.device_id)
     print(f"Imported {len(imported.profiles)} profile(s) for {device.name}")
 
 
-def cmd_profile_list(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_list(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:  # noqa: ARG001
     """List all profiles for a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
     config = device.config
     data = [
         {"index": i + 1, "name": profile.name, "active": i == config.active_profile}
@@ -279,15 +297,12 @@ def cmd_profile_list(args: argparse.Namespace) -> None:
         print(f"  {item['index']}. {item['name']}{marker}")
 
 
-def cmd_profile_switch(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_switch(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Switch to a named profile on a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
-    config = device.config
-    for i, profile in enumerate(config.profiles):
+    for i, profile in enumerate(device.config.profiles):
         if profile.name == args.profile_name:
             device.apply_profile(i)
-            _save_config(manager, args.device_id)
             print(f"Switched to profile: {profile.name}")
             return
     print(f"Profile not found: {args.profile_name}")
@@ -311,46 +326,36 @@ def _warn_duplicate(config, name):
             sys.exit(1)
 
 
-def cmd_profile_create(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_create(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Create a new profile on a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
-    config = device.config
-    _warn_duplicate(config, args.profile_name)
-    config.profiles.append(DeviceProfile(name=args.profile_name))
-    _save_config(manager, args.device_id)
+    _warn_duplicate(device.config, args.profile_name)
+    device.config.profiles.append(DeviceProfile(name=args.profile_name))
     print(f"Created profile: {args.profile_name}")
 
 
-def cmd_profile_rename(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_rename(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Rename a profile on a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
-    config = device.config
-    profile = _find_profile(config, args.old_name)
-    _warn_duplicate(config, args.new_name)
+    profile = _find_profile(device.config, args.old_name)
+    _warn_duplicate(device.config, args.new_name)
     profile.name = args.new_name
-    _save_config(manager, args.device_id)
     print(f"Renamed profile: {args.old_name} -> {args.new_name}")
 
 
-def cmd_profile_duplicate(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_duplicate(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Duplicate a profile on a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
-    config = device.config
-    profile = _find_profile(config, args.profile_name)
+    profile = _find_profile(device.config, args.profile_name)
     new_name = args.new_name or f"{profile.name} (Copy)"
-    _warn_duplicate(config, new_name)
-    config.profiles.append(profile.copy(new_name))
-    _save_config(manager, args.device_id)
+    _warn_duplicate(device.config, new_name)
+    device.config.profiles.append(profile.copy(new_name))
     print(f"Duplicated profile: {profile.name} -> {new_name}")
 
 
-def cmd_profile_delete(args: argparse.Namespace) -> None:
+@_with_device
+def cmd_profile_delete(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:  # noqa: ARG001
     """Delete a profile from a device."""
-    manager = _setup_manager()
-    device = _find_device(manager, args.device_id)
     config = device.config
     if len(config.profiles) <= 1:
         print("Cannot delete the last profile.")
@@ -362,16 +367,15 @@ def cmd_profile_delete(args: argparse.Namespace) -> None:
                 config.active_profile = len(config.profiles) - 1
             elif config.active_profile > i:
                 config.active_profile -= 1
-            _save_config(manager, args.device_id)
             print(f"Deleted profile: {args.profile_name}")
             return
     print(f"Profile not found: {args.profile_name}")
     sys.exit(1)
 
 
-def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
+@_with_manager
+def cmd_profile_copy_to_device(manager: DeviceManager, args: argparse.Namespace) -> None:
     """Copy a profile from one device to another."""
-    manager = _setup_manager()
     manager.scan_devices()
     src_device = manager.get_device(args.source_device)
     if not src_device:
@@ -392,9 +396,9 @@ def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
     print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
 
 
-def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
+@_with_manager
+def cmd_daemon(manager: DeviceManager, args: argparse.Namespace) -> None:  # noqa: ARG001
     """Run in daemon mode — scan devices, keep connections alive."""
-    manager = _setup_manager()
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)
     logger.info("ghub4linux daemon starting")
@@ -413,9 +417,9 @@ def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
         time.sleep(args.interval)
 
 
-def cmd_monitor(args: argparse.Namespace) -> None:
+@_with_manager
+def cmd_monitor(manager: DeviceManager, args: argparse.Namespace) -> None:
     """Monitor device battery levels in real-time."""
-    manager = _setup_manager()
     manager.scan_devices()
     if args.device_id:
         device = manager.get_device(args.device_id)
@@ -449,8 +453,10 @@ def cmd_monitor(args: argparse.Namespace) -> None:
     sys.exit(0)
 
 
-def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
+@_with_manager
+def cmd_install_daemon(manager: DeviceManager, args: argparse.Namespace) -> None:  # noqa: ARG001
     """Install the ghub4linux systemd user service."""
+    _ = manager  # ponytail: decorator requires manager, but this cmd is pure filesystem.
     pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_path = os.path.join(pkg_dir, "..", "..", "contrib", "ghub4linux@.service")
     if not os.path.exists(src_path):
