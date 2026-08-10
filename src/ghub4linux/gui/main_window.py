@@ -198,42 +198,26 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.content_stack.set_visible_child_name(device_id)
 
+    def _add_tab(self, notebook: Gtk.Notebook, title: str, widget: Gtk.Widget) -> None:
+        """Wrap *widget* in a ScrolledWindow and append it as a notebook tab."""
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_child(widget)
+        notebook.append_page(scroll, Gtk.Label(label=title))
+
     def _create_device_panel(self, device: BaseDevice) -> Gtk.Widget:
         """Create a panel for a device."""
-        # Tab view for device settings
         notebook = Gtk.Notebook()
 
-        # DPI tab
         if device.has_capability(DeviceCapability.DPI_ADJUSTMENT):
-            dpi_panel = DPIPanel(device)
-            dpi_scroll = Gtk.ScrolledWindow()
-            dpi_scroll.set_child(dpi_panel)
-            notebook.append_page(dpi_scroll, Gtk.Label(label="DPI"))
+            self._add_tab(notebook, "DPI", DPIPanel(device))
 
-        # Lighting tab
         if device.has_capability(DeviceCapability.RGB_LIGHTING):
-            lighting_panel = LightingPanel(device)
-            lighting_scroll = Gtk.ScrolledWindow()
-            lighting_scroll.set_child(lighting_panel)
-            notebook.append_page(lighting_scroll, Gtk.Label(label="Lighting"))
+            self._add_tab(notebook, "Lighting", LightingPanel(device))
 
-        # Macros tab
         if device.has_capability(DeviceCapability.MACROS):
-            macro_panel = MacroPanel(device)
-            macro_scroll = Gtk.ScrolledWindow()
-            macro_scroll.set_child(macro_panel)
-            notebook.append_page(macro_scroll, Gtk.Label(label="Macros"))
+            self._add_tab(notebook, "Macros", MacroPanel(device))
 
-        # Profiles tab
-        profile_panel = ProfilePanel(device)
-        profile_scroll = Gtk.ScrolledWindow()
-        profile_scroll.set_child(profile_panel)
-        notebook.append_page(profile_scroll, Gtk.Label(label="Profiles"))
-
-        # Info tab
-        info_panel = InfoPanel(device)
-        info_scroll = Gtk.ScrolledWindow()
-        info_scroll.set_child(info_panel)
-        notebook.append_page(info_scroll, Gtk.Label(label="Info"))
+        self._add_tab(notebook, "Profiles", ProfilePanel(device))
+        self._add_tab(notebook, "Info", InfoPanel(device))
 
         return notebook
