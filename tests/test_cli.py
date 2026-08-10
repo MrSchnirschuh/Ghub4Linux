@@ -336,3 +336,72 @@ def test_cli_profile_delete_help():
     with pytest.raises(SystemExit) as exc:
         main(["profile", "delete", "--help"])
     assert exc.value.code == 0
+
+
+# ── JSON output mode ──────────────────────────────────────────────────────────
+
+import json  # noqa: E402
+
+
+def test_cli_info_json(mock_manager, monkeypatch, capsys):
+    """'info --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "info", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["name"] == "G502 Lightspeed"
+    assert "capabilities" in out
+
+
+def test_cli_battery_json(mock_manager, monkeypatch, capsys):
+    """'battery --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "battery", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "level" in out
+    assert "charging" in out
+
+
+def test_cli_dpi_show_json(mock_manager, monkeypatch, capsys):
+    """'dpi --json' prints a JSON array of levels."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "dpi", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert isinstance(out, list)
+    assert any(item["active"] for item in out)
+
+
+def test_cli_dpi_set_json(mock_manager, monkeypatch, capsys):
+    """'dpi --dpi N --json' prints a JSON result."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "dpi", "046d:407f:mock123", "--dpi", "1600"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["dpi"] == 1600
+
+
+def test_cli_lighting_show_json(mock_manager, monkeypatch, capsys):
+    """'lighting --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "lighting", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "effect" in out
+
+
+def test_cli_profile_list_json(mock_manager, monkeypatch, capsys):
+    """'profile list --json' prints a JSON array."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "profile", "list", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert isinstance(out, list)
+    assert out[0]["active"] is True

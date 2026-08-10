@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict
-from typing import Callable, NoReturn
+from typing import Any, Callable, NoReturn
 
 from . import __version__
 from .core.config import (
@@ -97,18 +97,33 @@ def cmd_info(args: argparse.Namespace) -> None:
     if not info:
         print("Device info not available.")
         return
-    print(f"Name:           {info.name}")
-    print(f"Model:          {info.model}")
-    print(f"Serial:         {info.serial_number}")
-    print(f"Firmware:       {info.firmware_version}")
-    print(f"Type:           {info.device_type.value}")
-    print(f"Connection:     {info.connection_type.value}")
-    print(f"Battery:        {'yes' if info.has_battery else 'no'}")
-    print(f"RGB:            {'yes' if info.has_rgb else 'no'}")
-    print(f"Max DPI:        {info.max_dpi}")
-    print(f"Buttons:        {info.button_count}")
-    caps = ", ".join(c.value for c in device.capabilities)
-    print(f"Capabilities:   {caps}")
+    data: dict[str, Any] = {
+        "name": info.name,
+        "model": info.model,
+        "serial": info.serial_number,
+        "firmware": info.firmware_version,
+        "type": info.device_type.value,
+        "connection": info.connection_type.value,
+        "battery": info.has_battery,
+        "rgb": info.has_rgb,
+        "max_dpi": info.max_dpi,
+        "buttons": info.button_count,
+        "capabilities": sorted(c.value for c in device.capabilities),
+    }
+    if args.json:
+        print(json.dumps(data, indent=2))
+        return
+    print(f"Name:           {data['name']}")
+    print(f"Model:          {data['model']}")
+    print(f"Serial:         {data['serial']}")
+    print(f"Firmware:       {data['firmware']}")
+    print(f"Type:           {data['type']}")
+    print(f"Connection:     {data['connection']}")
+    print(f"Battery:        {'yes' if data['battery'] else 'no'}")
+    print(f"RGB:            {'yes' if data['rgb'] else 'no'}")
+    print(f"Max DPI:        {data['max_dpi']}")
+    print(f"Buttons:        {data['buttons']}")
+    print(f"Capabilities:   {', '.join(data['capabilities'])}")
 
 
 def cmd_battery(args: argparse.Namespace) -> None:
@@ -116,19 +131,33 @@ def cmd_battery(args: argparse.Namespace) -> None:
     device = _find_device(manager, args.device_id)
     battery = device.get_battery_status()
     if battery is None:
+        if args.json:
+            print(json.dumps({"level": None, "charging": None, "voltage": None}))
+            return
         print("Battery status not supported for this device.")
         return
+    data = {
+        "level": battery.level,
+        "charging": battery.charging,
+        "voltage": round(battery.voltage, 3) if battery.voltage is not None else None,
+    }
+    if args.json:
+        print(json.dumps(data))
+        return
     status = "charging" if battery.charging else "discharging"
-    print(f"Level: {battery.level}% ({status})")
-    if battery.voltage is not None:
-        print(f"Voltage: {battery.voltage:.3f}V")
+    print(f"Level: {data['level']}% ({status})")
+    if data["voltage"] is not None:
+        print(f"Voltage: {data['voltage']:.3f}V")
 
 
 def cmd_dpi(args: argparse.Namespace) -> None:
     manager = _setup_manager()
     device = _find_device(manager, args.device_id)
     if not device.has_capability(DeviceCapability.DPI_ADJUSTMENT):
-        print("DPI adjustment not supported for this device.")
+        if args.json:
+            print(json.dumps({"error": "DPI adjustment not supported for this device."}))
+        else:
+            print("DPI adjustment not supported for this device.")
         return
     settings = device.get_dpi_settings()
     if args.dpi is not None:
@@ -137,39 +166,76 @@ def cmd_dpi(args: argparse.Namespace) -> None:
             settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
             device.set_dpi_settings(settings)
             _save_config(manager, args.device_id)
+            if args.json:
+                print(json.dumps({"level": level_idx + 1, "dpi": args.dpi}))
+                return
             print(f"Set DPI level {level_idx + 1} to {args.dpi}")
         else:
+            if args.json:
+                print(json.dumps({"error": f"Invalid level: {level_idx}"}))
+                sys.exit(1)
             print(f"Invalid level: {level_idx}")
             sys.exit(1)
     else:
-        for i, level in enumerate(settings.levels):
-            marker = " <-- active" if i == settings.active_level else ""
-            print(f"  Level {i + 1}: {level.dpi} DPI  #{level.color.to_hex()}{marker}")
+        data = [
+            {
+                "level": i + 1,
+                "dpi": level.dpi,
+                "color": level.color.to_hex(),
+                "active": i == settings.active_level,
+            }
+            for i, level in enumerate(settings.levels)
+        ]
+        if args.json:
+            print(json.dumps(data, indent=2))
+            return
+        for item in data:
+            marker = " <-- active" if item["active"] else ""
+            print(f"  Level {item['level']}: {item['dpi']} DPI  #{item['color']}{marker}")
 
 
 def cmd_lighting(args: argparse.Namespace) -> None:
     manager = _setup_manager()
     device = _find_device(manager, args.device_id)
     if not device.has_capability(DeviceCapability.RGB_LIGHTING):
-        print("RGB lighting not supported for this device.")
+        if args.json:
+            print(json.dumps({"error": "RGB lighting not supported for this device."}))
+        else:
+            print("RGB lighting not supported for this device.")
         return
     settings = device.get_lighting_settings()
     if args.on is not None:
         settings.enabled = args.on
         device.set_lighting_settings(settings)
         _save_config(manager, args.device_id)
+        if args.json:
+            print(json.dumps({"enabled": args.on}))
+            return
         print(f"Lighting {'enabled' if args.on else 'disabled'}")
     elif args.effect is not None:
         settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
         device.set_lighting_settings(settings)
         _save_config(manager, args.device_id)
+        if args.json:
+            print(json.dumps({"effect": args.effect, "brightness": settings.effect.brightness}))
+            return
         print(f"Set effect: {args.effect}")
     else:
-        print(f"Enabled:    {settings.enabled}")
-        print(f"Effect:     {settings.effect.effect_type}")
-        print(f"Brightness: {settings.effect.brightness}%")
-        print(f"Speed:      {settings.effect.speed}")
-        print(f"Color:      #{settings.effect.color.to_hex()}")
+        data = {
+            "enabled": settings.enabled,
+            "effect": settings.effect.effect_type,
+            "brightness": settings.effect.brightness,
+            "speed": settings.effect.speed,
+            "color": settings.effect.color.to_hex(),
+        }
+        if args.json:
+            print(json.dumps(data, indent=2))
+            return
+        print(f"Enabled:    {data['enabled']}")
+        print(f"Effect:     {data['effect']}")
+        print(f"Brightness: {data['brightness']}%")
+        print(f"Speed:      {data['speed']}")
+        print(f"Color:      #{data['color']}")
 
 
 def cmd_profile_export(args: argparse.Namespace) -> None:
@@ -201,9 +267,16 @@ def cmd_profile_list(args: argparse.Namespace) -> None:
     manager = _setup_manager()
     device = _find_device(manager, args.device_id)
     config = device.config
-    for i, profile in enumerate(config.profiles):
-        marker = " <-- active" if i == config.active_profile else ""
-        print(f"  {i + 1}. {profile.name}{marker}")
+    data = [
+        {"index": i + 1, "name": profile.name, "active": i == config.active_profile}
+        for i, profile in enumerate(config.profiles)
+    ]
+    if args.json:
+        print(json.dumps(data, indent=2))
+        return
+    for item in data:
+        marker = " <-- active" if item["active"] else ""
+        print(f"  {item['index']}. {item['name']}{marker}")
 
 
 def cmd_profile_switch(args: argparse.Namespace) -> None:
@@ -574,6 +647,7 @@ PROFILE_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, d
 def main(argv: list[str] | None = None) -> NoReturn:
     parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--json", action="store_true", help="Output command results as JSON for scripting")
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name, help_text, fields in CLI_COMMANDS:
