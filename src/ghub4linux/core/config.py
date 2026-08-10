@@ -234,23 +234,30 @@ class AppConfig:
     global_config: GlobalConfig = field(default_factory=GlobalConfig)
     devices: dict[str, DeviceConfig] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Track the path this config was loaded from (not serialized)."""
+        self._path: Path | None = None
+
     def save(self, path: Path | None = None) -> None:
         """Save configuration to file."""
-        if path is None:
-            path = get_config_dir() / "config.json"
-        with open(path, "w") as f:
+        target = path or self._path or get_config_dir() / "config.json"
+        with open(target, "w") as f:
             json.dump(asdict(self), f, indent=2)
+        self._path = target
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppConfig":
         """Load configuration from file."""
-        if path is None:
-            path = get_config_dir() / "config.json"
-        if not path.exists():
-            return cls()
-        with open(path) as f:
+        target = path or get_config_dir() / "config.json"
+        if not target.exists():
+            new_cfg = cls()
+            new_cfg._path = target
+            return new_cfg
+        with open(target) as f:
             data = json.load(f)
-        return _from_dict(cls, data)  # type: ignore[no-any-return]
+        cfg: AppConfig = _from_dict(cls, data)  # type: ignore[no-any-return]
+        cfg._path = target
+        return cfg
 
     def get_device_config(self, device_id: str) -> DeviceConfig | None:
         """Get configuration for a specific device."""
