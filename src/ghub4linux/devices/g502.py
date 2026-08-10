@@ -298,14 +298,6 @@ class G502XPlus(G502Device):
             "base",
         ]
 
-    def get_device_info(self) -> DeviceInfo:
-        """Get device information."""
-        return self._make_device_info(
-            name=self._DEVICE_NAME,
-            model=self._MODEL_NAME,
-            button_count=self.BUTTON_COUNT,
-        )
-
     def set_zone_lighting(self, zone: str, effect: LightingEffect) -> bool:
         """Set lighting for a specific RGB zone."""
         if zone not in self._rgb_zones:
