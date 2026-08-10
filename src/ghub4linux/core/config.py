@@ -22,14 +22,6 @@ def get_config_dir() -> Path:
     return config_dir
 
 
-def get_data_dir() -> Path:
-    """Get the data directory for ghub4linux."""
-    xdg_data = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
-    data_dir = Path(xdg_data) / "ghub4linux"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
-
-
 @dataclass
 class RGBColor:
     """RGB color representation."""
