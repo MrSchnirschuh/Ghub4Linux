@@ -255,6 +255,52 @@ class TestDeviceManager:
 
         assert device.device_id not in manager._devices
 
+    def test_register_device_class_with_hint(self):
+        """Test registering a device class with a product-string hint."""
+        from ghub4linux.core.config import AppConfig
+
+        config = AppConfig()
+        manager = DeviceManager(config)
+
+        manager.register_device_class(0x1234, MockDevice, "mock")
+
+        assert 0x1234 not in manager._device_registry
+        assert manager._device_registry_hints[0x1234] == [("mock", MockDevice)]
+
+    def test_scan_uses_hint_when_pid_is_shared(self, monkeypatch, mock_hid_device):
+        """When multiple classes share a PID, product string hint picks the right one."""
+        from ghub4linux.core import hid as hid_module
+        from ghub4linux.core.config import AppConfig
+
+        class AltMockDevice(BaseDevice):
+            def _init_device(self) -> None:
+                self._info = self.get_device_info()
+
+            def get_device_info(self) -> DeviceInfo:
+                return DeviceInfo(
+                    name="Alt", model="Alt", vendor_id=0, product_id=0,
+                    serial_number="", firmware_version="", device_type=DeviceType.MOUSE,
+                    connection_type=ConnectionType.WIRED, has_battery=False,
+                    has_rgb=False, max_dpi=0, dpi_step=0, button_count=0,
+                    has_onboard_profiles=False,
+                )
+
+        class HintHIDManager:
+            def find_logitech_devices(self):
+                return [mock_hid_device]
+
+        monkeypatch.setattr(hid_module, "HIDManager", HintHIDManager)
+        config = AppConfig()
+        manager = DeviceManager(config)
+        manager._hid_manager = HintHIDManager()
+        manager.register_device_class(0x1234, MockDevice, "mock device")
+        manager.register_device_class(0x1234, AltMockDevice, "alt")
+
+        devices = manager.scan_devices()
+
+        assert len(devices) == 1
+        assert isinstance(devices[0], MockDevice)
+
     def test_g502_hero_registered(self):
         """G502 Hero (0xC092) is registered so it can be detected (issue #9)."""
         from ghub4linux.devices.g502 import G502_DEVICES, G502_HERO_PID, G502Hero

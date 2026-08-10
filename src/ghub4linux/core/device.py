@@ -150,33 +150,13 @@ class BaseDevice(ABC):
         of ``feature_id -> feature_index`` for every feature that the device
         reports as supported (non-zero index).
         """
-        from .hid import (
-            FEATURE_ADJUSTABLE_DPI,
-            FEATURE_BATTERY_STATUS,
-            FEATURE_BATTERY_VOLTAGE,
-            FEATURE_LED_CONTROL,
-            FEATURE_ONBOARD_PROFILES,
-            FEATURE_REPORT_RATE,
-            FEATURE_RGB_EFFECTS,
-            FEATURE_UNIFIED_BATTERY,
-        )
+        from .hid import DISCOVERABLE_FEATURES
 
         feature_map: dict[int, int] = {}
         if not self._connection:
             return feature_map
 
-        features_to_discover = [
-            FEATURE_ADJUSTABLE_DPI,
-            FEATURE_BATTERY_STATUS,
-            FEATURE_BATTERY_VOLTAGE,
-            FEATURE_UNIFIED_BATTERY,
-            FEATURE_LED_CONTROL,
-            FEATURE_RGB_EFFECTS,
-            FEATURE_ONBOARD_PROFILES,
-            FEATURE_REPORT_RATE,
-        ]
-
-        for feature_id in features_to_discover:
+        for feature_id in DISCOVERABLE_FEATURES:
             try:
                 params = bytes([(feature_id >> 8) & 0xFF, feature_id & 0xFF])
                 response = self._connection.send_feature_request(0x00, 0x00, params)
