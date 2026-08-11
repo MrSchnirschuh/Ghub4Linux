@@ -78,9 +78,7 @@ class ProfilePanel(Gtk.Box):
         app_title.set_margin_top(24)
         self.append(app_title)
 
-        app_desc = Gtk.Label(
-            label="Automatically switch profiles based on the active application"
-        )
+        app_desc = Gtk.Label(label="Automatically switch profiles based on the active application")
         app_desc.add_css_class("dim-label")
         app_desc.set_halign(Gtk.Align.START)
         self.append(app_desc)

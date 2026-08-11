@@ -80,9 +80,7 @@ class LightingPanel(Gtk.Box):
         brightness_label = Gtk.Label(label="Brightness")
         brightness_box.append(brightness_label)
 
-        self.brightness_scale = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 0, 100, 5
-        )
+        self.brightness_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
         self.brightness_scale.set_value(settings.effect.brightness)
         self.brightness_scale.set_hexpand(True)
         brightness_box.append(self.brightness_scale)

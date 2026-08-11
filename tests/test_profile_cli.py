@@ -203,7 +203,9 @@ def test_profile_copy_to_device_nonexistent_profile(mock_manager, monkeypatch):
     """Test copy-to-device with nonexistent profile exits with code 1."""
     monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
     with pytest.raises(SystemExit) as exc:
-        main(["profile", "copy-to-device", "046d:407f:mock123", "046d:407f:mock123", "NoSuchProfile"])
+        main(
+            ["profile", "copy-to-device", "046d:407f:mock123", "046d:407f:mock123", "NoSuchProfile"]
+        )
     assert exc.value.code == 1
 
 
@@ -219,7 +221,17 @@ def test_profile_copy_to_device_custom_name(mock_manager, monkeypatch):
     """Test copy-to-device with --name works."""
     monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
     with pytest.raises(SystemExit) as exc:
-        main(["profile", "copy-to-device", "046d:407f:mock123", "046d:407f:mock123", "Default", "--name", "Copied"])
+        main(
+            [
+                "profile",
+                "copy-to-device",
+                "046d:407f:mock123",
+                "046d:407f:mock123",
+                "Default",
+                "--name",
+                "Copied",
+            ]
+        )
     assert exc.value.code == 0
 
     config = mock_manager.app_config.get_device_config("046d:407f:mock123")

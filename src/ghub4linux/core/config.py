@@ -75,13 +75,15 @@ class DPILevel:
 class DPISettings:
     """DPI settings for a device."""
 
-    levels: list[DPILevel] = field(default_factory=lambda: [
-        DPILevel(dpi=400, color=RGBColor(red=255, green=0, blue=0)),
-        DPILevel(dpi=800, color=RGBColor(red=0, green=255, blue=0)),
-        DPILevel(dpi=1600, color=RGBColor(red=0, green=0, blue=255)),
-        DPILevel(dpi=3200, color=RGBColor(red=255, green=255, blue=0)),
-        DPILevel(dpi=6400, color=RGBColor(red=255, green=0, blue=255)),
-    ])
+    levels: list[DPILevel] = field(
+        default_factory=lambda: [
+            DPILevel(dpi=400, color=RGBColor(red=255, green=0, blue=0)),
+            DPILevel(dpi=800, color=RGBColor(red=0, green=255, blue=0)),
+            DPILevel(dpi=1600, color=RGBColor(red=0, green=0, blue=255)),
+            DPILevel(dpi=3200, color=RGBColor(red=255, green=255, blue=0)),
+            DPILevel(dpi=6400, color=RGBColor(red=255, green=0, blue=255)),
+        ]
+    )
     active_level: int = 1
     default_dpi: int = 800
 
@@ -170,9 +172,7 @@ class DeviceConfig:
 
     device_id: str  # vendor_id:product_id:serial
     device_name: str
-    profiles: list[DeviceProfile] = field(
-        default_factory=lambda: [DeviceProfile(name="Default")]
-    )
+    profiles: list[DeviceProfile] = field(default_factory=lambda: [DeviceProfile(name="Default")])
     active_profile: int = 0
     app_profiles: list[ApplicationProfile] = field(default_factory=list)
 
@@ -217,7 +217,9 @@ def _from_dict(cls: type, data: dict) -> Any:
 
         if origin is list and args and hasattr(args[0], "__dataclass_fields__"):
             kwargs[f_name] = [_from_dict(args[0], item) for item in val]
-        elif origin is dict and args and len(args) == 2 and hasattr(args[1], "__dataclass_fields__"):
+        elif (
+            origin is dict and args and len(args) == 2 and hasattr(args[1], "__dataclass_fields__")
+        ):
             kwargs[f_name] = {k: _from_dict(args[1], v) for k, v in val.items()}  # type: ignore[assignment]
         elif hasattr(ftype, "__dataclass_fields__"):
             kwargs[f_name] = _from_dict(ftype, val)

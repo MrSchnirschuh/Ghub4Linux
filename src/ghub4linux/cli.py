@@ -134,7 +134,9 @@ def cmd_dpi(args: argparse.Namespace) -> None:
     if args.dpi is not None:
         level_idx = args.level if args.level is not None else settings.active_level
         if 0 <= level_idx < len(settings.levels):
-            settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
+            settings.levels[level_idx] = DPILevel(
+                dpi=args.dpi, color=settings.levels[level_idx].color
+            )
             device.set_dpi_settings(settings)
             _save_config(manager, args.device_id)
             print(f"Set DPI level {level_idx + 1} to {args.dpi}")
@@ -160,7 +162,9 @@ def cmd_lighting(args: argparse.Namespace) -> None:
         _save_config(manager, args.device_id)
         print(f"Lighting {'enabled' if args.on else 'disabled'}")
     elif args.effect is not None:
-        settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
+        settings.effect = LightingEffect(
+            effect_type=args.effect, brightness=args.brightness or settings.effect.brightness
+        )
         device.set_lighting_settings(settings)
         _save_config(manager, args.device_id)
         print(f"Set effect: {args.effect}")
@@ -316,7 +320,9 @@ def cmd_profile_copy_to_device(args: argparse.Namespace) -> None:
     dst_config.profiles.append(src_profile.copy(dst_name))
     manager.app_config.set_device_config(args.dest_device, dst_config)
     _save_config(manager, args.dest_device)
-    print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
+    print(
+        f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'"
+    )
 
 
 def cmd_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
@@ -399,38 +405,95 @@ def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
 def _add_profile_subcommands(sub):
     """Add profile export/import/list/switch subcommands to a subparser group."""
     for name, help_text, fields in [
-        ("export", "Export device profiles to JSON",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("--output", {"-o"}, {"default": None, "help": "Output file path"})]),
-        ("import", "Import device profiles from JSON",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("file", {}, {"help": "JSON file to import"})]),
-        ("list", "List all profiles for a device",
-         [("device_id", {}, {"help": "Device ID (from list)"})]),
-        ("switch", "Switch to a named profile",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("profile_name", {}, {"help": "Profile name to switch to"})]),
-        ("create", "Create a new profile",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("profile_name", {}, {"help": "Profile name to create"})]),
-        ("rename", "Rename a profile",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("old_name", {}, {"help": "Current profile name"}),
-          ("new_name", {}, {"help": "New profile name"})]),
-        ("delete", "Delete a profile",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("profile_name", {}, {"help": "Profile name to delete"})]),
-        ("duplicate", "Duplicate a profile",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("profile_name", {}, {"help": "Profile name to duplicate"}),
-          ("--name", {"-n"}, {"dest": "new_name", "default": None,
-                              "help": "Name for the new profile (default: '<original> (Copy)')"})]),
-        ("copy-to-device", "Copy a profile to another device",
-         [("source_device", {}, {"help": "Source device ID"}),
-          ("dest_device", {}, {"help": "Destination device ID"}),
-          ("profile_name", {}, {"help": "Profile name to copy"}),
-          ("--name", {"-n"}, {"dest": "new_name", "default": None,
-                              "help": "Name on destination (default: same as source)"})]),
+        (
+            "export",
+            "Export device profiles to JSON",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("--output", {"-o"}, {"default": None, "help": "Output file path"}),
+            ],
+        ),
+        (
+            "import",
+            "Import device profiles from JSON",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("file", {}, {"help": "JSON file to import"}),
+            ],
+        ),
+        (
+            "list",
+            "List all profiles for a device",
+            [("device_id", {}, {"help": "Device ID (from list)"})],
+        ),
+        (
+            "switch",
+            "Switch to a named profile",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("profile_name", {}, {"help": "Profile name to switch to"}),
+            ],
+        ),
+        (
+            "create",
+            "Create a new profile",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("profile_name", {}, {"help": "Profile name to create"}),
+            ],
+        ),
+        (
+            "rename",
+            "Rename a profile",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("old_name", {}, {"help": "Current profile name"}),
+                ("new_name", {}, {"help": "New profile name"}),
+            ],
+        ),
+        (
+            "delete",
+            "Delete a profile",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("profile_name", {}, {"help": "Profile name to delete"}),
+            ],
+        ),
+        (
+            "duplicate",
+            "Duplicate a profile",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("profile_name", {}, {"help": "Profile name to duplicate"}),
+                (
+                    "--name",
+                    {"-n"},
+                    {
+                        "dest": "new_name",
+                        "default": None,
+                        "help": "Name for the new profile (default: '<original> (Copy)')",
+                    },
+                ),
+            ],
+        ),
+        (
+            "copy-to-device",
+            "Copy a profile to another device",
+            [
+                ("source_device", {}, {"help": "Source device ID"}),
+                ("dest_device", {}, {"help": "Destination device ID"}),
+                ("profile_name", {}, {"help": "Profile name to copy"}),
+                (
+                    "--name",
+                    {"-n"},
+                    {
+                        "dest": "new_name",
+                        "default": None,
+                        "help": "Name on destination (default: same as source)",
+                    },
+                ),
+            ],
+        ),
     ]:
         p = sub.add_parser(name, help=help_text)
         for arg_name, flags, kwargs in fields:
@@ -442,7 +505,9 @@ def _add_profile_subcommands(sub):
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
-    parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
+    parser = argparse.ArgumentParser(
+        prog="ghub4linux-cli", description="Headless Logitech device control"
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -450,23 +515,66 @@ def main(argv: list[str] | None = None) -> NoReturn:
         ("list", "List connected devices", []),
         ("info", "Show device info", [("device_id", {}, {"help": "Device ID (from list)"})]),
         ("battery", "Show battery status", [("device_id", {}, {"help": "Device ID"})]),
-        ("dpi", "Get/set DPI settings",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("--level", {}, {"type": int, "default": None, "help": "DPI level index (0-based)"}),
-          ("--dpi", {}, {"type": int, "default": None, "help": "DPI value to set"})]),
-        ("lighting", "Get/set lighting settings",
-         [("device_id", {}, {"help": "Device ID"}),
-          ("--on", {}, {"action": "store_true", "default": None, "dest": "on"}),
-          ("--off", {}, {"action": "store_false", "dest": "on"}),
-          ("--effect", {}, {"choices": ["static", "breathing", "cycle", "wave", "off"], "default": None}),
-          ("--brightness", {}, {"type": int, "default": None, "help": "Brightness 0-100"})]),
-        ("daemon", "Run as headless daemon",
-         [("--interval", {}, {"type": int, "default": 60, "help": "Poll interval in seconds (default: 60)"})]),
-        ("install-daemon", "Install systemd user service for headless daemon",
-         [("--user", {}, {"default": None, "help": "Systemd user (default: current user)"})]),
-        ("monitor", "Monitor device battery levels in real-time",
-         [("device_id", {}, {"nargs": "?", "default": None, "help": "Device ID (omit for all devices)"}),
-          ("--interval", {}, {"type": int, "default": 5, "help": "Poll interval in seconds (default: 5)"})]),
+        (
+            "dpi",
+            "Get/set DPI settings",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                (
+                    "--level",
+                    {},
+                    {"type": int, "default": None, "help": "DPI level index (0-based)"},
+                ),
+                ("--dpi", {}, {"type": int, "default": None, "help": "DPI value to set"}),
+            ],
+        ),
+        (
+            "lighting",
+            "Get/set lighting settings",
+            [
+                ("device_id", {}, {"help": "Device ID"}),
+                ("--on", {}, {"action": "store_true", "default": None, "dest": "on"}),
+                ("--off", {}, {"action": "store_false", "dest": "on"}),
+                (
+                    "--effect",
+                    {},
+                    {"choices": ["static", "breathing", "cycle", "wave", "off"], "default": None},
+                ),
+                ("--brightness", {}, {"type": int, "default": None, "help": "Brightness 0-100"}),
+            ],
+        ),
+        (
+            "daemon",
+            "Run as headless daemon",
+            [
+                (
+                    "--interval",
+                    {},
+                    {"type": int, "default": 60, "help": "Poll interval in seconds (default: 60)"},
+                )
+            ],
+        ),
+        (
+            "install-daemon",
+            "Install systemd user service for headless daemon",
+            [("--user", {}, {"default": None, "help": "Systemd user (default: current user)"})],
+        ),
+        (
+            "monitor",
+            "Monitor device battery levels in real-time",
+            [
+                (
+                    "device_id",
+                    {},
+                    {"nargs": "?", "default": None, "help": "Device ID (omit for all devices)"},
+                ),
+                (
+                    "--interval",
+                    {},
+                    {"type": int, "default": 5, "help": "Poll interval in seconds (default: 5)"},
+                ),
+            ],
+        ),
     ]:
         p = sub.add_parser(name, help=help_text)
         for arg_name, _, kwargs in fields:  # type: ignore[attr-defined]
