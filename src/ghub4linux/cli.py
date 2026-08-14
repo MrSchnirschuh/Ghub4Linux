@@ -391,7 +391,10 @@ def cmd_install_daemon(args: argparse.Namespace) -> None:  # noqa: ARG001
     if not os.path.exists(src_path):
         print("Error: ghub4linux@.service not found", file=sys.stderr)
         sys.exit(1)
-    user = args.user or os.environ.get("USER", "pandi")
+    user = args.user or os.environ.get("USER", "")
+    if not user:
+        print("Error: could not determine user (set USER or use --user)", file=sys.stderr)
+        sys.exit(1)
     unit_name = f"ghub4linux@{user}.service"
     dst = os.path.expanduser(f"~/.config/systemd/user/{unit_name}")
     os.makedirs(os.path.dirname(dst), exist_ok=True)

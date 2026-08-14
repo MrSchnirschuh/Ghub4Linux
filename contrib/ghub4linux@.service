@@ -1,6 +1,6 @@
 [Unit]
 Description=ghub4linux — Logitech device control daemon (headless)
-Documentation=https://github.com/pandium/ghub4linux
+Documentation=https://github.com/MrSchnirschuh/Ghub4Linux
 After=multi-user.target
 
 [Service]

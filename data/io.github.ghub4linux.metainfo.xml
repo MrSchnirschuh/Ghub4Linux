@@ -32,11 +32,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Main window with device settings</caption>
-      <image>https://raw.githubusercontent.com/MrSchnirschuh/GLinux/main/data/screenshots/main.png</image>
+      <image>https://raw.githubusercontent.com/MrSchnirschuh/Ghub4Linux/main/data/screenshots/main.png</image>
     </screenshot>
   </screenshots>
-  <url type="homepage">https://github.com/MrSchnirschuh/GLinux</url>
-  <url type="bugtracker">https://github.com/MrSchnirschuh/GLinux/issues</url>
+  <url type="homepage">https://github.com/MrSchnirschuh/Ghub4Linux</url>
+  <url type="bugtracker">https://github.com/MrSchnirschuh/Ghub4Linux/issues</url>
   <developer_name>ghub4linux Contributors</developer_name>
   <update_contact>ghub4linux@example.com</update_contact>
   <content_rating type="oars-1.1" />
