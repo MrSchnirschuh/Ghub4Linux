@@ -317,6 +317,22 @@ def test_cli_profile_delete_nonexistent(mock_manager, monkeypatch):
     assert exc.value.code == 1
 
 
+def test_cli_setup_manager_uses_loaded_config(monkeypatch, tmp_path):
+    """Regression: _setup_manager must use AppConfig.load(), not AppConfig()."""
+    from ghub4linux.cli import _setup_manager
+    from ghub4linux.core.config import AppConfig, DeviceConfig
+
+    config_path = tmp_path / "config.json"
+    saved = AppConfig()
+    saved.devices["loaded-device"] = DeviceConfig(device_id="loaded-device", device_name="Loaded")
+    saved.save(config_path)
+
+    monkeypatch.setattr("ghub4linux.core.config.get_config_dir", lambda: tmp_path)
+    manager = _setup_manager()
+    assert manager.app_config.get_device_config("loaded-device") is not None
+    assert manager.app_config.get_device_config("loaded-device").device_name == "Loaded"
+
+
 def test_cli_profile_create_help():
     """Test profile create --help works."""
     with pytest.raises(SystemExit) as exc:

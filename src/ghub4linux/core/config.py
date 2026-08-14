@@ -56,6 +56,8 @@ class RGBColor:
     def from_hex(cls, hex_color: str) -> "RGBColor":
         """Create from hex string."""
         hex_color = hex_color.lstrip("#")
+        if len(hex_color) != 6:
+            raise ValueError(f"hex color must be 6 digits, got {hex_color!r}")
         return cls(
             red=int(hex_color[0:2], 16),
             green=int(hex_color[2:4], 16),

@@ -61,6 +61,15 @@ class TestRGBColor:
         assert color.green == 128
         assert color.blue == 0
 
+    def test_from_hex_short_invalid_raises(self):
+        """Test from_hex rejects malformed / too short hex strings."""
+        with pytest.raises(ValueError):
+            RGBColor.from_hex("#ff80")
+        with pytest.raises(ValueError):
+            RGBColor.from_hex("ff8")
+        with pytest.raises(ValueError):
+            RGBColor.from_hex("")
+
     def test_validation_bounds(self):
         """Test RGB value bounds validation."""
         with pytest.raises(ValueError):

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def _setup_manager() -> DeviceManager:
-    config = AppConfig()
+    config = AppConfig.load()
     manager = DeviceManager(config)
     for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
         manager.register_device_class(pid, cls)
