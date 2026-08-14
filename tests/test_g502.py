@@ -89,10 +89,7 @@ class TestConnectionType:
             usage_page=0xFF00,
             usage=0x0001,
         )
-        assert (
-            make_device(G502Lightspeed, wired)._get_connection_type()
-            == ConnectionType.WIRED
-        )
+        assert make_device(G502Lightspeed, wired)._get_connection_type() == ConnectionType.WIRED
 
     def test_xplus_wired_pid_returns_wired(self):
         wired = HIDDevice(
@@ -106,10 +103,7 @@ class TestConnectionType:
             usage_page=0xFF00,
             usage=0x0001,
         )
-        assert (
-            make_device(G502XPlus, wired)._get_connection_type()
-            == ConnectionType.WIRED
-        )
+        assert make_device(G502XPlus, wired)._get_connection_type() == ConnectionType.WIRED
 
 
 class TestDeviceInfo:

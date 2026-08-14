@@ -47,9 +47,7 @@ class DPIPanel(Gtk.Box):
             label.set_width_chars(8)
             level_box.append(label)
 
-            scale = Gtk.Scale.new_with_range(
-                Gtk.Orientation.HORIZONTAL, 100, max_dpi, 50
-            )
+            scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 100, max_dpi, 50)
             scale.set_value(level.dpi)
             scale.set_hexpand(True)
             scale.set_draw_value(True)

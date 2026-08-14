@@ -121,7 +121,9 @@ class MainWindow(Adw.ApplicationWindow):
         empty_label.add_css_class("title-2")
         empty_box.append(empty_label)
 
-        empty_desc = Gtk.Label(label="Select a device from the sidebar or connect a Logitech device")
+        empty_desc = Gtk.Label(
+            label="Select a device from the sidebar or connect a Logitech device"
+        )
         empty_desc.add_css_class("dim-label")
         empty_box.append(empty_desc)
 
@@ -174,15 +176,15 @@ class MainWindow(Adw.ApplicationWindow):
         logger.info(f"Device scan complete: {len(devices)} new device(s) found")
 
         for device in devices:
-            logger.info(f"  {device.name}: {'connected' if device.is_connected else 'not connected'}")
+            logger.info(
+                f"  {device.name}: {'connected' if device.is_connected else 'not connected'}"
+            )
             row = DeviceRow(device)
             self.device_list.append(row)
 
         return False
 
-    def _on_device_selected(
-        self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None
-    ) -> None:
+    def _on_device_selected(self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         """Handle device selection."""
         if not row or not isinstance(row, DeviceRow):
             self.content_stack.set_visible_child_name("empty")

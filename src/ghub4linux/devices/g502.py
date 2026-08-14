@@ -151,9 +151,7 @@ class G502Device(BaseDevice):
             return None
 
         try:
-            response = self._connection.send_feature_request(
-                self._battery_feature_index, 0x00
-            )
+            response = self._connection.send_feature_request(self._battery_feature_index, 0x00)
             if response and len(response) >= 6:
                 level = response[4]
                 status = response[5]
@@ -179,9 +177,7 @@ class G502Device(BaseDevice):
                 dpi_encoded = dpi_value // self.DPI_STEP
 
                 params = bytes([i, (dpi_encoded >> 8) & 0xFF, dpi_encoded & 0xFF])
-                self._connection.send_feature_request(
-                    self._dpi_feature_index, 0x03, params
-                )
+                self._connection.send_feature_request(self._dpi_feature_index, 0x03, params)
 
             # Set active level
             self._connection.send_feature_request(
@@ -204,9 +200,7 @@ class G502Device(BaseDevice):
         try:
             if not settings.enabled:
                 # Turn off lighting
-                self._connection.send_feature_request(
-                    self._rgb_feature_index, 0x00, bytes([0x00])
-                )
+                self._connection.send_feature_request(self._rgb_feature_index, 0x00, bytes([0x00]))
             else:
                 # Set effect
                 effect = settings.effect
@@ -223,9 +217,7 @@ class G502Device(BaseDevice):
                         effect.brightness,
                     ]
                 )
-                self._connection.send_feature_request(
-                    self._rgb_feature_index, 0x01, params
-                )
+                self._connection.send_feature_request(self._rgb_feature_index, 0x01, params)
 
             self.active_profile.lighting_settings = settings
             return True

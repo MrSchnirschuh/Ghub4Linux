@@ -170,9 +170,7 @@ class TestDeviceConfig:
             name="Gaming",
             dpi_settings=DPISettings(),
             lighting_settings=LightingSettings(),
-            button_bindings=[
-                ButtonBinding(button_id=5, action_type="keypress", custom_key="a")
-            ],
+            button_bindings=[ButtonBinding(button_id=5, action_type="keypress", custom_key="a")],
             macros=[Macro(name="M", actions=[MacroAction(action_type="keypress", value="b")])],
         )
         dup = profile.copy("Gaming (Copy)")
@@ -222,9 +220,7 @@ class TestAppConfig:
     def test_get_device_config(self):
         """Test getting device configuration."""
         config = AppConfig()
-        config.devices["test:123"] = DeviceConfig(
-            device_id="test:123", device_name="Test"
-        )
+        config.devices["test:123"] = DeviceConfig(device_id="test:123", device_name="Test")
 
         result = config.get_device_config("test:123")
         assert result is not None

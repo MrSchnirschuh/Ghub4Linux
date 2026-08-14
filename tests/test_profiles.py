@@ -1,6 +1,5 @@
 """Tests for ghub4linux profile management (DeviceConfig operations)."""
 
-
 from ghub4linux.core.config import (
     ApplicationProfile,
     DeviceConfig,
@@ -48,6 +47,7 @@ class TestDeviceConfigProfiles:
 
         # Duplicate
         from copy import deepcopy
+
         dup = DeviceProfile(
             name=f"{src.name} (Copy)",
             dpi_settings=deepcopy(src.dpi_settings),
@@ -153,7 +153,9 @@ class TestApplicationProfiles:
         """Test removing an application profile."""
         config = DeviceConfig(device_id="test:001", device_name="Test")
         config.app_profiles.append(
-            ApplicationProfile(app_name="Firefox", executable_name="firefox", profile_name="Default")
+            ApplicationProfile(
+                app_name="Firefox", executable_name="firefox", profile_name="Default"
+            )
         )
         config.app_profiles.append(
             ApplicationProfile(app_name="VS Code", executable_name="code", profile_name="Coding")
@@ -170,7 +172,9 @@ class TestApplicationProfiles:
         config = DeviceConfig(device_id="test:001", device_name="Test")
         apps = [
             ApplicationProfile(app_name="Firefox", executable_name="firefox", profile_name="Web"),
-            ApplicationProfile(app_name="Terminal", executable_name="gnome-terminal", profile_name="Default"),
+            ApplicationProfile(
+                app_name="Terminal", executable_name="gnome-terminal", profile_name="Default"
+            ),
             ApplicationProfile(app_name="Steam", executable_name="steam", profile_name="Gaming"),
         ]
         config.app_profiles.extend(apps)
