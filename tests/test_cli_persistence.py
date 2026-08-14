@@ -8,21 +8,27 @@ commands persist; dpi/lighting must too.
 import pytest
 
 from ghub4linux.cli import main
+from ghub4linux.core.config import AppConfig
 
 
 class _Recorder:
     def __init__(self):
-        self.calls = []
+        self.set_calls = []
+        self.save_calls = 0
 
-    def __call__(self, manager, device_id):  # noqa: ARG002
-        self.calls.append(device_id)
+    def set_device_config(self, device_id, config):  # noqa: ARG002
+        self.set_calls.append(device_id)
+
+    def save(self):
+        self.save_calls += 1
 
 
 @pytest.fixture
 def save_recorder(mock_manager, monkeypatch):
-    """Replace _save_config with a recorder so we can assert it's invoked."""
+    """Record calls to AppConfig persistence methods."""
     rec = _Recorder()
-    monkeypatch.setattr("ghub4linux.cli._save_config", rec)
+    monkeypatch.setattr(AppConfig, "set_device_config", rec.set_device_config)
+    monkeypatch.setattr(AppConfig, "save", rec.save)
     monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
     return rec
 
@@ -32,7 +38,8 @@ def test_cli_dpi_set_persists(save_recorder):
     with pytest.raises(SystemExit) as exc:
         main(["dpi", "046d:407f:mock123", "--dpi", "1600"])
     assert exc.value.code == 0
-    assert save_recorder.calls == ["046d:407f:mock123"]
+    assert save_recorder.set_calls == ["046d:407f:mock123"]
+    assert save_recorder.save_calls == 1
 
 
 def test_cli_lighting_on_persists(save_recorder):
@@ -40,7 +47,8 @@ def test_cli_lighting_on_persists(save_recorder):
     with pytest.raises(SystemExit) as exc:
         main(["lighting", "046d:407f:mock123", "--on"])
     assert exc.value.code == 0
-    assert save_recorder.calls == ["046d:407f:mock123"]
+    assert save_recorder.set_calls == ["046d:407f:mock123"]
+    assert save_recorder.save_calls == 1
 
 
 def test_cli_lighting_effect_persists(save_recorder):
@@ -48,4 +56,5 @@ def test_cli_lighting_effect_persists(save_recorder):
     with pytest.raises(SystemExit) as exc:
         main(["lighting", "046d:407f:mock123", "--effect", "breathing"])
     assert exc.value.code == 0
-    assert save_recorder.calls == ["046d:407f:mock123"]
+    assert save_recorder.set_calls == ["046d:407f:mock123"]
+    assert save_recorder.save_calls == 1

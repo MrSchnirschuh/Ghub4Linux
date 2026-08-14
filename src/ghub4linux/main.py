@@ -123,7 +123,7 @@ class Ghub4LinuxApplication(Adw.Application):
             application_name="ghub4linux",
             application_icon="input-gaming-symbolic",
             developer_name="ghub4linux Contributors",
-            version="0.1.0",
+            version=__version__,
             developers=["ghub4linux Contributors"],
             copyright="© 2024 ghub4linux Contributors",
             license_type=Gtk.License.GPL_3_0,

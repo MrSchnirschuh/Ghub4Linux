@@ -278,10 +278,19 @@ class TestDeviceManager:
 
             def get_device_info(self) -> DeviceInfo:
                 return DeviceInfo(
-                    name="Alt", model="Alt", vendor_id=0, product_id=0,
-                    serial_number="", firmware_version="", device_type=DeviceType.MOUSE,
-                    connection_type=ConnectionType.WIRED, has_battery=False,
-                    has_rgb=False, max_dpi=0, dpi_step=0, button_count=0,
+                    name="Alt",
+                    model="Alt",
+                    vendor_id=0,
+                    product_id=0,
+                    serial_number="",
+                    firmware_version="",
+                    device_type=DeviceType.MOUSE,
+                    connection_type=ConnectionType.WIRED,
+                    has_battery=False,
+                    has_rgb=False,
+                    max_dpi=0,
+                    dpi_step=0,
+                    button_count=0,
                     has_onboard_profiles=False,
                 )
 
@@ -328,3 +337,33 @@ class TestDeviceManager:
         devices = manager.scan_devices()
 
         assert devices == []
+
+    def test_scan_survives_connect_failure(self, monkeypatch, mock_hid_device):
+        """BaseDevice.connect() returning False must not raise or leak.
+
+        DeviceManager.scan_devices no longer wraps connect() in try/except
+        because the BaseDevice contract is to return a bool instead of raising.
+        """
+        from ghub4linux.core import hid as hid_module
+        from ghub4linux.core.config import AppConfig
+
+        class SingleHIDManager:
+            def find_logitech_devices(self):
+                return [mock_hid_device]
+
+        monkeypatch.setattr(hid_module, "HIDManager", SingleHIDManager)
+        config = AppConfig()
+        manager = DeviceManager(config)
+        manager._hid_manager = SingleHIDManager()
+        manager.register_device_class(0x1234, MockDevice)
+
+        # Force connect() to return False (simulates unavailable HID device).
+        monkeypatch.setattr(BaseDevice, "connect", lambda _self: False)
+
+        devices = manager.scan_devices()
+
+        # The device is tracked (so the user can see it) but marked disconnected.
+        assert len(devices) == 1
+        assert devices[0].device_id == mock_hid_device.device_id
+        assert devices[0].is_connected is False
+        assert manager.get_device(mock_hid_device.device_id) is devices[0]

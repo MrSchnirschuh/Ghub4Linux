@@ -63,14 +63,6 @@ def _find_device(manager: DeviceManager, device_id: str) -> BaseDevice:
     return device
 
 
-def _save_config(manager: DeviceManager, device_id: str) -> None:
-    """Persist the device config and save to disk."""
-    device = manager.get_device(device_id)
-    if device:
-        manager.app_config.set_device_config(device_id, device.config)
-    manager.app_config.save()
-
-
 _running = True
 
 
@@ -91,13 +83,14 @@ def _with_device(
         manager = _setup_manager()
         device = _find_device(manager, args.device_id)
         func(manager, device, args)
-        _save_config(manager, args.device_id)
+        manager.app_config.set_device_config(args.device_id, device.config)
+        manager.app_config.save()
 
     return wrapper
 
 
 def _with_manager(
-    func: Callable[[DeviceManager, argparse.Namespace], None]
+    func: Callable[[DeviceManager, argparse.Namespace], None],
 ) -> Callable[[argparse.Namespace], None]:
     """Ponytail: decorator that supplies a configured manager."""
 
@@ -189,7 +182,9 @@ def cmd_dpi(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespac
     if args.dpi is not None:
         level_idx = args.level if args.level is not None else settings.active_level
         if 0 <= level_idx < len(settings.levels):
-            settings.levels[level_idx] = DPILevel(dpi=args.dpi, color=settings.levels[level_idx].color)
+            settings.levels[level_idx] = DPILevel(
+                dpi=args.dpi, color=settings.levels[level_idx].color
+            )
             device.set_dpi_settings(settings)
             if args.json:
                 print(json.dumps({"level": level_idx + 1, "dpi": args.dpi}))
@@ -236,7 +231,9 @@ def cmd_lighting(_manager: DeviceManager, device: BaseDevice, args: argparse.Nam
             return
         print(f"Lighting {'enabled' if args.on else 'disabled'}")
     elif args.effect is not None:
-        settings.effect = LightingEffect(effect_type=args.effect, brightness=args.brightness or settings.effect.brightness)
+        settings.effect = LightingEffect(
+            effect_type=args.effect, brightness=args.brightness or settings.effect.brightness
+        )
         device.set_lighting_settings(settings)
         if args.json:
             print(json.dumps({"effect": args.effect, "brightness": settings.effect.brightness}))
@@ -261,7 +258,9 @@ def cmd_lighting(_manager: DeviceManager, device: BaseDevice, args: argparse.Nam
 
 
 @_with_device
-def cmd_profile_export(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_export(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Export device profiles to a JSON file."""
     data = asdict(device.config)
     output = args.output or f"{device.device_id}_profiles.json"
@@ -271,7 +270,9 @@ def cmd_profile_export(_manager: DeviceManager, device: BaseDevice, args: argpar
 
 
 @_with_device
-def cmd_profile_import(manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_import(
+    manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Import device profiles from a JSON file."""
     with open(args.file) as f:
         data = json.load(f)
@@ -298,7 +299,9 @@ def cmd_profile_list(_manager: DeviceManager, device: BaseDevice, args: argparse
 
 
 @_with_device
-def cmd_profile_switch(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_switch(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Switch to a named profile on a device."""
     for i, profile in enumerate(device.config.profiles):
         if profile.name == args.profile_name:
@@ -333,7 +336,9 @@ def _find_profile(config, name) -> "DeviceProfile":
 
 
 @_with_device
-def cmd_profile_create(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_create(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Create a new profile on a device."""
     _find_profile_index(device.config, args.profile_name, exists_ok=True)
     device.config.profiles.append(DeviceProfile(name=args.profile_name))
@@ -341,7 +346,9 @@ def cmd_profile_create(_manager: DeviceManager, device: BaseDevice, args: argpar
 
 
 @_with_device
-def cmd_profile_rename(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_rename(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Rename a profile on a device."""
     profile = _find_profile(device.config, args.old_name)
     _find_profile_index(device.config, args.new_name, exists_ok=True)
@@ -350,7 +357,9 @@ def cmd_profile_rename(_manager: DeviceManager, device: BaseDevice, args: argpar
 
 
 @_with_device
-def cmd_profile_duplicate(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+def cmd_profile_duplicate(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:
     """Duplicate a profile on a device."""
     profile = _find_profile(device.config, args.profile_name)
     new_name = args.new_name or f"{profile.name} (Copy)"
@@ -360,7 +369,9 @@ def cmd_profile_duplicate(_manager: DeviceManager, device: BaseDevice, args: arg
 
 
 @_with_device
-def cmd_profile_delete(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:  # noqa: ARG001
+def cmd_profile_delete(
+    _manager: DeviceManager, device: BaseDevice, args: argparse.Namespace
+) -> None:  # noqa: ARG001
     """Delete a profile from a device."""
     config = device.config
     if len(config.profiles) <= 1:
@@ -392,8 +403,10 @@ def cmd_profile_copy_to_device(manager: DeviceManager, args: argparse.Namespace)
     _find_profile_index(dst_device.config, dst_name, exists_ok=True)
     dst_device.config.profiles.append(src_profile.copy(dst_name))
     manager.app_config.set_device_config(args.dest_device, dst_device.config)
-    _save_config(manager, args.dest_device)
-    print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
+    manager.app_config.save()
+    print(
+        f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'"
+    )
 
 
 @_with_manager
@@ -578,7 +591,11 @@ PROFILE_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, d
             ("file", None, {"help": "JSON file to import"}),
         ],
     ),
-    ("list", "List all profiles for a device", [("device_id", None, {"help": "Device ID (from list)"})]),
+    (
+        "list",
+        "List all profiles for a device",
+        [("device_id", None, {"help": "Device ID (from list)"})],
+    ),
     (
         "switch",
         "Switch to a named profile",
@@ -651,9 +668,13 @@ PROFILE_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, d
 
 
 def main(argv: list[str] | None = None) -> NoReturn:
-    parser = argparse.ArgumentParser(prog="ghub4linux-cli", description="Headless Logitech device control")
+    parser = argparse.ArgumentParser(
+        prog="ghub4linux-cli", description="Headless Logitech device control"
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--json", action="store_true", help="Output command results as JSON for scripting")
+    parser.add_argument(
+        "--json", action="store_true", help="Output command results as JSON for scripting"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name, help_text, fields in CLI_COMMANDS:

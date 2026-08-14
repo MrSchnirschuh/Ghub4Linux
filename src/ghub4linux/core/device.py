@@ -295,10 +295,7 @@ class DeviceManager:
                 continue
 
             device = device_class(hid_device, device_config)
-            try:
-                device.connect()
-            except Exception as e:
-                logger.warning(f"Could not connect to {device.name}: {e}")
+            device.connect()
 
             self._devices[device_id] = device
             new_devices.append(device)
