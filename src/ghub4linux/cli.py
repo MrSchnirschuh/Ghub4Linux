@@ -309,27 +309,33 @@ def cmd_profile_switch(_manager: DeviceManager, device: BaseDevice, args: argpar
     sys.exit(1)
 
 
-def _find_profile(config, name):
+def _find_profile_index(config, name, *, exists_ok: bool = False) -> int:
+    """Return the index of the profile named *name*.
+
+    If *exists_ok* is False (default), print an error and exit(1) when the
+    profile is missing. If True, exit(1) when the profile already exists.
+    """
+    for i, p in enumerate(config.profiles):
+        if p.name == name:
+            if exists_ok:
+                print(f"Profile already exists: {name}")
+                sys.exit(1)
+            return i
+    if not exists_ok:
+        print(f"Profile not found: {name}")
+        sys.exit(1)
+    return -1
+
+
+def _find_profile(config, name) -> "DeviceProfile":
     """Find a profile by name, print error + exit(1) if not found."""
-    for p in config.profiles:
-        if p.name == name:
-            return p
-    print(f"Profile not found: {name}")
-    sys.exit(1)
-
-
-def _warn_duplicate(config, name):
-    """Exit with code 1 if a profile with *name* already exists."""
-    for p in config.profiles:
-        if p.name == name:
-            print(f"Profile already exists: {name}")
-            sys.exit(1)
+    return config.profiles[_find_profile_index(config, name)]  # type: ignore[no-any-return]
 
 
 @_with_device
 def cmd_profile_create(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Create a new profile on a device."""
-    _warn_duplicate(device.config, args.profile_name)
+    _find_profile_index(device.config, args.profile_name, exists_ok=True)
     device.config.profiles.append(DeviceProfile(name=args.profile_name))
     print(f"Created profile: {args.profile_name}")
 
@@ -338,7 +344,7 @@ def cmd_profile_create(_manager: DeviceManager, device: BaseDevice, args: argpar
 def cmd_profile_rename(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Rename a profile on a device."""
     profile = _find_profile(device.config, args.old_name)
-    _warn_duplicate(device.config, args.new_name)
+    _find_profile_index(device.config, args.new_name, exists_ok=True)
     profile.name = args.new_name
     print(f"Renamed profile: {args.old_name} -> {args.new_name}")
 
@@ -348,7 +354,7 @@ def cmd_profile_duplicate(_manager: DeviceManager, device: BaseDevice, args: arg
     """Duplicate a profile on a device."""
     profile = _find_profile(device.config, args.profile_name)
     new_name = args.new_name or f"{profile.name} (Copy)"
-    _warn_duplicate(device.config, new_name)
+    _find_profile_index(device.config, new_name, exists_ok=True)
     device.config.profiles.append(profile.copy(new_name))
     print(f"Duplicated profile: {profile.name} -> {new_name}")
 
@@ -360,17 +366,13 @@ def cmd_profile_delete(_manager: DeviceManager, device: BaseDevice, args: argpar
     if len(config.profiles) <= 1:
         print("Cannot delete the last profile.")
         sys.exit(1)
-    for i, profile in enumerate(config.profiles):
-        if profile.name == args.profile_name:
-            config.profiles.pop(i)
-            if config.active_profile >= len(config.profiles):
-                config.active_profile = len(config.profiles) - 1
-            elif config.active_profile > i:
-                config.active_profile -= 1
-            print(f"Deleted profile: {args.profile_name}")
-            return
-    print(f"Profile not found: {args.profile_name}")
-    sys.exit(1)
+    idx = _find_profile_index(config, args.profile_name)
+    config.profiles.pop(idx)
+    if config.active_profile >= len(config.profiles):
+        config.active_profile = len(config.profiles) - 1
+    elif config.active_profile > idx:
+        config.active_profile -= 1
+    print(f"Deleted profile: {args.profile_name}")
 
 
 @_with_manager
@@ -385,13 +387,11 @@ def cmd_profile_copy_to_device(manager: DeviceManager, args: argparse.Namespace)
     if not dst_device:
         print(f"Destination device not found: {args.dest_device}")
         sys.exit(1)
-    src_config = src_device.config
-    dst_config = dst_device.config
-    src_profile = _find_profile(src_config, args.profile_name)
+    src_profile = _find_profile(src_device.config, args.profile_name)
     dst_name = args.new_name or src_profile.name
-    _warn_duplicate(dst_config, dst_name)
-    dst_config.profiles.append(src_profile.copy(dst_name))
-    manager.app_config.set_device_config(args.dest_device, dst_config)
+    _find_profile_index(dst_device.config, dst_name, exists_ok=True)
+    dst_device.config.profiles.append(src_profile.copy(dst_name))
+    manager.app_config.set_device_config(args.dest_device, dst_device.config)
     _save_config(manager, args.dest_device)
     print(f"Copied profile '{src_profile.name}' from {src_device.name} to {dst_device.name} as '{dst_name}'")
 
