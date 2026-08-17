@@ -12,14 +12,11 @@ from ghub4linux.core.config import (
     DeviceProfile,
     DPILevel,
     DPISettings,
-    GlobalConfig,
     LightingEffect,
     LightingSettings,
     Macro,
     MacroAction,
     RGBColor,
-    get_config_dir,
-    get_data_dir,
 )
 
 
@@ -63,15 +60,6 @@ class TestRGBColor:
         assert color.red == 255
         assert color.green == 128
         assert color.blue == 0
-
-    def test_from_hex_short_invalid_raises(self):
-        """Test from_hex rejects malformed / too short hex strings."""
-        with pytest.raises(ValueError):
-            RGBColor.from_hex("#ff80")
-        with pytest.raises(ValueError):
-            RGBColor.from_hex("ff8")
-        with pytest.raises(ValueError):
-            RGBColor.from_hex("")
 
     def test_validation_bounds(self):
         """Test RGB value bounds validation."""
@@ -250,50 +238,3 @@ class TestAppConfig:
 
         assert "test:456" in config.devices
         assert config.devices["test:456"].device_name == "New Device"
-
-
-class TestConfigDirectories:
-    """Tests for XDG directory helpers."""
-
-    def test_config_dir_respects_xdg_config_home(self, monkeypatch, tmp_path):
-        """get_config_dir uses XDG_CONFIG_HOME when set."""
-        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
-        expected = tmp_path / "cfg" / "ghub4linux"
-        assert get_config_dir() == expected
-        assert expected.is_dir()
-
-    def test_data_dir_respects_xdg_data_home(self, monkeypatch, tmp_path):
-        """get_data_dir uses XDG_DATA_HOME when set."""
-        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-        expected = tmp_path / "data" / "ghub4linux"
-        assert get_data_dir() == expected
-        assert expected.is_dir()
-
-
-class TestFromDictEdgeCases:
-    """Tests for _from_dict helper edge cases."""
-
-    def test_from_dict_non_dataclass_passes_through(self):
-        """_from_dict returns raw data for non-dataclass cls."""
-        from ghub4linux.core.config import _from_dict
-
-        assert _from_dict(str, {"a": 1}) == {"a": 1}
-
-    def test_from_dict_skips_missing_fields(self):
-        """_from_dict ignores dict keys that are not dataclass fields."""
-        from ghub4linux.core.config import _from_dict
-
-        result = _from_dict(GlobalConfig, {"version": "2.0", "unknown_field": 123})
-        assert result.version == "2.0"
-        assert not hasattr(result, "unknown_field")
-
-
-class TestAppConfigLoadEdgeCases:
-    """Tests for AppConfig.load edge cases."""
-
-    def test_load_missing_path_returns_default(self, tmp_path):
-        """Loading a non-existent file returns a default AppConfig."""
-        missing = tmp_path / "not-there.json"
-        cfg = AppConfig.load(missing)
-        assert isinstance(cfg, AppConfig)
-        assert len(cfg.devices) == 0

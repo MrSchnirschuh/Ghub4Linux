@@ -31,9 +31,22 @@ class MockHIDManager:
 def mock_manager(monkeypatch):
     """Replace HIDManager with a mock that returns one G502 X device."""
     from ghub4linux.core import hid as hid_module
+    from ghub4linux.core.device import BaseDevice
     from ghub4linux.devices.g502 import G502_DEVICES
 
     monkeypatch.setattr(hid_module, "HIDManager", MockHIDManager)
+
+    # ponytail: avoid importing the real hid library in unit tests.
+    def _fake_connect(self):
+        self._connection = object()  # truthy placeholder
+        self._info = self.get_device_info()
+        return True
+
+    def _fake_disconnect(self):
+        self._connection = None
+
+    monkeypatch.setattr(BaseDevice, "connect", _fake_connect)
+    monkeypatch.setattr(BaseDevice, "disconnect", _fake_disconnect)
 
     config = AppConfig()
     manager = DeviceManager(config)
