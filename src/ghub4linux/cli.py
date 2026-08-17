@@ -35,6 +35,7 @@ from .core.device import BaseDevice, DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_RECEIVER_HINTS
 from .devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
+from .style import dim
 
 logger = logging.getLogger(__name__)
 
@@ -497,14 +498,19 @@ def _add_subcommand(
     help_text: str,
     fields: list[tuple[str, tuple[str, ...] | None, dict]],
     func: Callable[[argparse.Namespace], None],
+    example: str | None = None,
 ) -> argparse.ArgumentParser:
     """Add a subcommand with the given positional/optional arguments."""
-    p: argparse.ArgumentParser = sub.add_parser(name, help=help_text)
-    for arg_name, flags, kwargs in fields:
+    kwargs: dict = {"help": help_text}
+    if example:
+        kwargs["epilog"] = f"Example: {dim(example)}"
+        kwargs["formatter_class"] = argparse.RawDescriptionHelpFormatter
+    p: argparse.ArgumentParser = sub.add_parser(name, **kwargs)
+    for arg_name, flags, arg_kwargs in fields:
         if flags:
-            p.add_argument(*flags, arg_name, **kwargs)
+            p.add_argument(*flags, arg_name, **arg_kwargs)
         else:
-            p.add_argument(arg_name, **kwargs)
+            p.add_argument(arg_name, **arg_kwargs)
     p.set_defaults(func=func)
     return p
 
@@ -667,6 +673,30 @@ PROFILE_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, d
 ]
 
 
+CLI_EXAMPLES: dict[str, str] = {
+    "list": "ghub4linux-cli list",
+    "info": "ghub4linux-cli info 046d:407f:mock123",
+    "battery": "ghub4linux-cli battery 046d:407f:mock123",
+    "dpi": "ghub4linux-cli dpi 046d:407f:mock123 --level 0 --dpi 1600",
+    "lighting": "ghub4linux-cli lighting 046d:407f:mock123 --on --effect breathing",
+    "daemon": "ghub4linux-cli daemon --interval 60",
+    "install-daemon": "ghub4linux-cli install-daemon",
+    "monitor": "ghub4linux-cli monitor --interval 5",
+}
+
+PROFILE_EXAMPLES: dict[str, str] = {
+    "export": "ghub4linux-cli profile export 046d:407f:mock123 -o profiles.json",
+    "import": "ghub4linux-cli profile import 046d:407f:mock123 profiles.json",
+    "list": "ghub4linux-cli profile list 046d:407f:mock123",
+    "switch": "ghub4linux-cli profile switch 046d:407f:mock123 Default",
+    "create": "ghub4linux-cli profile create 046d:407f:mock123 Gaming",
+    "rename": "ghub4linux-cli profile rename 046d:407f:mock123 Default Work",
+    "delete": "ghub4linux-cli profile delete 046d:407f:mock123 Old",
+    "duplicate": "ghub4linux-cli profile duplicate 046d:407f:mock123 Default -n Backup",
+    "copy-to-device": "ghub4linux-cli profile copy-to-device src-device dst-device Default -n Laptop",
+}
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     parser = argparse.ArgumentParser(
         prog="ghub4linux-cli", description="Headless Logitech device control"
@@ -684,6 +714,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
             help_text,
             fields,
             globals()[f"cmd_{name.replace('-', '_')}"],
+            example=CLI_EXAMPLES.get(name),
         )
 
     p_profile = sub.add_parser("profile", help="Manage device profiles")
@@ -695,6 +726,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
             help_text,
             fields,
             globals()[f"cmd_profile_{name.replace('-', '_')}"],
+            example=PROFILE_EXAMPLES.get(name),
         )
 
     args = parser.parse_args(argv)

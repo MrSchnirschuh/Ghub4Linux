@@ -44,3 +44,21 @@ def test_command_tables_are_non_empty():
     assert PROFILE_COMMANDS
     names = {name for name, _, _ in CLI_COMMANDS}
     assert {"list", "info", "dpi", "lighting", "monitor"} <= names
+
+
+def test_subcommand_help_contains_examples(capsys):
+    """Every top-level and profile subcommand --help shows a usage example."""
+    from ghub4linux.cli import CLI_EXAMPLES, PROFILE_EXAMPLES, main
+
+    for cmd in CLI_EXAMPLES:
+        with pytest.raises(SystemExit):
+            main([cmd, "--help"])
+        out = capsys.readouterr().out
+        assert "Example:" in out, f"{cmd} --help missing example"
+        assert "ghub4linux-cli" in out, f"{cmd} --help missing usage line"
+
+    for cmd in PROFILE_EXAMPLES:
+        with pytest.raises(SystemExit):
+            main(["profile", cmd, "--help"])
+        out = capsys.readouterr().out
+        assert "Example:" in out, f"profile {cmd} --help missing example"
