@@ -49,6 +49,10 @@ class G502Device(BaseDevice):
     BUTTON_COUNT = 11
     DEFAULT_DPI_LEVELS = [400, 800, 1600, 3200, 6400]
 
+    # Per-model metadata; subclasses override only what differs.
+    _DEVICE_NAME = "G502"
+    _MODEL_NAME = "G502"
+
     def __init__(self, hid_device: HIDDevice, config: DeviceConfig | None = None):
         """Initialize G502 device."""
         super().__init__(hid_device, config)
@@ -66,26 +70,15 @@ class G502Device(BaseDevice):
 
     def _init_device(self) -> None:
         """Initialize device after connection."""
-        # Query feature indexes
         self._query_features()
-        # Get device info
         self._info = self.get_device_info()
         logger.info(f"Initialized {self._info.name}")
 
     def _query_features(self) -> None:
-        """Query HID++ feature indexes via IRoot (0x0000) feature discovery.
-
-        Falls back to typical hardcoded indexes when the device does not
-        respond or is not connected.
-        """
-        from ..core.hid import (
-            FEATURE_ADJUSTABLE_DPI,
-            FEATURE_BATTERY_STATUS,
-            FEATURE_RGB_EFFECTS,
-        )
+        """Query HID++ feature indexes via IRoot (0x0000) feature discovery."""
+        from ..core.hid import FEATURE_ADJUSTABLE_DPI, FEATURE_BATTERY_STATUS, FEATURE_RGB_EFFECTS
 
         feature_map = self.discover_features()
-
         self._dpi_feature_index = feature_map.get(FEATURE_ADJUSTABLE_DPI, 0x06)
         self._battery_feature_index = feature_map.get(FEATURE_BATTERY_STATUS, 0x07)
         self._rgb_feature_index = feature_map.get(FEATURE_RGB_EFFECTS, 0x08)
@@ -93,8 +86,8 @@ class G502Device(BaseDevice):
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
         return self._make_device_info(
-            name=self.hid_device.product or "G502",
-            model="G502",
+            name=self._DEVICE_NAME,
+            model=self._MODEL_NAME,
             has_rgb=True,
         )
 
@@ -264,33 +257,22 @@ class G502Device(BaseDevice):
 class G502Lightspeed(G502Device):
     """G502 Lightspeed specific implementation."""
 
-    MAX_DPI = 25600
-
-    def get_device_info(self) -> DeviceInfo:
-        """Get device information."""
-        return self._make_device_info(
-            name="G502 Lightspeed",
-            model="G502 Lightspeed",
-        )
+    _DEVICE_NAME = "G502 Lightspeed"
+    _MODEL_NAME = "G502 Lightspeed"
 
 
 class G502Hero(G502Device):
     """G502 Hero specific implementation (wired)."""
 
-    MAX_DPI = 25600
-
-    def get_device_info(self) -> DeviceInfo:
-        """Get device information."""
-        return self._make_device_info(
-            name="G502 Hero",
-            model="G502 Hero",
-        )
+    _DEVICE_NAME = "G502 Hero"
+    _MODEL_NAME = "G502 Hero"
 
 
 class G502XPlus(G502Device):
     """G502X Plus specific implementation."""
 
-    MAX_DPI = 25600
+    _DEVICE_NAME = "G502 X Plus"
+    _MODEL_NAME = "G502X Plus"
     BUTTON_COUNT = 13  # G502X Plus has more buttons
 
     def __init__(self, hid_device: HIDDevice, config: DeviceConfig | None = None):
@@ -307,14 +289,6 @@ class G502XPlus(G502Device):
             "dpi_indicator",
             "base",
         ]
-
-    def get_device_info(self) -> DeviceInfo:
-        """Get device information."""
-        return self._make_device_info(
-            name="G502 X Plus",
-            model="G502X Plus",
-            button_count=self.BUTTON_COUNT,
-        )
 
     def set_zone_lighting(self, zone: str, effect: LightingEffect) -> bool:
         """Set lighting for a specific RGB zone."""

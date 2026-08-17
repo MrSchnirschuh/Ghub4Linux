@@ -135,18 +135,39 @@ Ghub4Linux/
 ├── install.sh              # One-command install + desktop registration
 ├── pyproject.toml          # Project definition & dependencies
 ├── README.md
+├── contrib/
+│   └── ghub4linux@.service # systemd user service template
 ├── data/
 │   ├── com.github.mrschnirschuh.ghub4linux.desktop  # Desktop entry
 │   └── icons/hicolor/scalable/apps/
 │       └── com.github.mrschnirschuh.ghub4linux.svg  # Application icon
-└── src/
-    └── ghub4linux/
-        ├── __init__.py     # Package metadata
-        ├── __main__.py     # Entry point (main())
-        └── app.py          # GTK4/Adwaita application
+├── packaging/
+│   ├── arch/PKGBUILD
+│   └── flatpak/com.github.mrschnirschuh.ghub4linux.yml
+├── src/
+│   └── ghub4linux/
+│       ├── __init__.py     # Package metadata
+│       ├── __main__.py     # GUI entry point
+│       ├── cli.py          # Headless CLI
+│       ├── main.py         # GTK4/Adwaita application
+│       ├── core/           # config, device, HID
+│       └── devices/        # Per-device drivers (G502, G502X Plus, …)
+└── tests/                  # pytest suite
+```
+
+## Headless CLI
+
+The same package provides `ghub4linux-cli` for scripting and headless use:
+
+```bash
+ghub4linux-cli list
+ghub4linux-cli info 046d:407f:abc123
+ghub4linux-cli --json info 046d:407f:abc123        # i3blocks/polybar friendly
+ghub4linux-cli dpi 046d:407f:abc123 --dpi 1600
+ghub4linux-cli profile list 046d:407f:abc123
 ```
 
 ## License
 
-MIT
+GPL-3.0-or-later
 

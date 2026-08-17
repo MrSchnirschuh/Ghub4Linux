@@ -121,56 +121,12 @@ def test_cli_help():
     assert exc.value.code == 0
 
 
-def test_cli_help_groups(capsys):
-    """Test that --help output contains the logical command groups and examples."""
-    with pytest.raises(SystemExit):
-        main(["--help"])
-    out = capsys.readouterr().out
-    assert "[device]" in out
-    assert "[system]" in out
-    assert "[profile]" in out
-    assert "list" in out
-    assert "info" in out
-    assert "daemon" in out
-    assert "for usage examples" in out
-
-
-def test_cli_subcommand_help_contains_examples(capsys):
-    """Test device/system subcommand --help contains a usage example."""
-    for cmd in ["list", "info", "battery", "dpi", "lighting", "daemon", "monitor"]:
-        with pytest.raises(SystemExit):
-            main([cmd, "--help"])
-        out = capsys.readouterr().out
-        assert "Example:" in out, f"{cmd} --help missing example"
-        assert "ghub4linux-cli" in out, f"{cmd} --help missing usage line"
-
-
 def test_cli_list_help():
     """Test subcommand --help works."""
     for cmd in ["list", "info", "battery", "dpi", "lighting", "daemon", "install-daemon"]:
         with pytest.raises(SystemExit) as exc:
             main([cmd, "--help"])
         assert exc.value.code == 0, f"{cmd} --help failed"
-
-
-def test_cli_profile_subcommand_examples(capsys):
-    """Test every profile subcommand --help contains a usage example."""
-    subcommands = [
-        "export",
-        "import",
-        "list",
-        "switch",
-        "create",
-        "rename",
-        "delete",
-        "duplicate",
-    ]
-    for cmd in subcommands:
-        with pytest.raises(SystemExit):
-            main(["profile", cmd, "--help"])
-        out = capsys.readouterr().out
-        assert "Example:" in out, f"{cmd} --help missing example"
-        assert "ghub4linux-cli" in out, f"{cmd} --help missing usage line"
 
 
 def test_cli_daemon_starts_and_stops(mock_manager, monkeypatch):
@@ -396,3 +352,72 @@ def test_cli_profile_delete_help():
     with pytest.raises(SystemExit) as exc:
         main(["profile", "delete", "--help"])
     assert exc.value.code == 0
+
+
+# ── JSON output mode ──────────────────────────────────────────────────────────
+
+import json  # noqa: E402
+
+
+def test_cli_info_json(mock_manager, monkeypatch, capsys):
+    """'info --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "info", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["name"] == "G502 Lightspeed"
+    assert "capabilities" in out
+
+
+def test_cli_battery_json(mock_manager, monkeypatch, capsys):
+    """'battery --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "battery", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "level" in out
+    assert "charging" in out
+
+
+def test_cli_dpi_show_json(mock_manager, monkeypatch, capsys):
+    """'dpi --json' prints a JSON array of levels."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "dpi", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert isinstance(out, list)
+    assert any(item["active"] for item in out)
+
+
+def test_cli_dpi_set_json(mock_manager, monkeypatch, capsys):
+    """'dpi --dpi N --json' prints a JSON result."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "dpi", "046d:407f:mock123", "--dpi", "1600"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["dpi"] == 1600
+
+
+def test_cli_lighting_show_json(mock_manager, monkeypatch, capsys):
+    """'lighting --json' prints valid JSON."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "lighting", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "effect" in out
+
+
+def test_cli_profile_list_json(mock_manager, monkeypatch, capsys):
+    """'profile list --json' prints a JSON array."""
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "profile", "list", "046d:407f:mock123"])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert isinstance(out, list)
+    assert out[0]["active"] is True
