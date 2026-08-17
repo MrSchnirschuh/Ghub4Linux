@@ -167,6 +167,16 @@ ghub4linux-cli dpi 046d:407f:abc123 --dpi 1600
 ghub4linux-cli profile list 046d:407f:abc123
 ```
 
+## Development
+
+Run tests and lint locally with the provided `Makefile`:
+
+```bash
+make test   # pytest
+make lint   # ruff check + format check
+make format # auto-format with ruff
+```
+
 ## License
 
 GPL-3.0-or-later
