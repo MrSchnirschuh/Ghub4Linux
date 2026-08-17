@@ -1,6 +1,7 @@
 """Tests for ghub4linux CLI refactor helpers."""
 
 import argparse
+import json
 
 import pytest
 
@@ -62,3 +63,20 @@ def test_subcommand_help_contains_examples(capsys):
             main(["profile", cmd, "--help"])
         out = capsys.readouterr().out
         assert "Example:" in out, f"profile {cmd} --help missing example"
+
+
+def test_cli_list_json(mock_manager, monkeypatch, capsys):
+    """`list --json` returns a JSON array of devices."""
+    from ghub4linux.cli import main
+
+    monkeypatch.setattr("ghub4linux.cli._setup_manager", lambda: mock_manager)
+    with pytest.raises(SystemExit) as exc:
+        main(["--json", "list"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    assert "device_id" in data[0]
+    assert "name" in data[0]
+    assert "connected" in data[0]

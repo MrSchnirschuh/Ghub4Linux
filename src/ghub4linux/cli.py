@@ -105,12 +105,18 @@ def _with_manager(
 @_with_manager
 def cmd_list(manager: DeviceManager, args: argparse.Namespace) -> None:  # noqa: ARG001
     devices = manager.scan_devices()
+    data = [
+        {"device_id": d.device_id, "name": d.name, "connected": d.is_connected} for d in devices
+    ]
+    if args.json:
+        print(json.dumps(data, indent=2))
+        return
     if not devices:
         print("No devices found.")
         return
-    for d in devices:
-        conn = "connected" if d.is_connected else "disconnected"
-        print(f"{d.device_id:40} {d.name:25} {conn}")
+    for item in data:
+        conn = "connected" if item["connected"] else "disconnected"
+        print(f"{item['device_id']:40} {item['name']:25} {conn}")
 
 
 @_with_device
