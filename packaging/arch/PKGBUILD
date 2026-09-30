@@ -7,14 +7,14 @@ pkgdesc="Logitech G Hub alternative for Linux - Configure DPI, lighting, macros 
 arch=('any')
 url="https://github.com/MrSchnirschuh/Ghub4Linux"
 license=('GPL3')
+# hidapi is deliberately absent: the HID layer talks to /dev/hidraw directly,
+# because hidapi reaches the device through libusb, which a normal user cannot
+# open.
 depends=(
     'python>=3.10'
     'python-gobject'
-    'python-pydantic'
-    'python-hidapi'
     'gtk4'
     'libadwaita'
-    'hidapi'
 )
 makedepends=(
     'python-build'
@@ -49,10 +49,9 @@ package() {
     install -Dm644 data/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.github.mrschnirschuh.ghub4linux.svg"
     
-    # Install udev rules for device access
-    install -Dm644 data/udev/99-ghub4linux.rules \
-        "$pkgdir/usr/lib/udev/rules.d/99-ghub4linux.rules"
-    
-    # Install license
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    # Install udev rules for device access.  The 70- prefix is required: the
+    # uaccess ACL is applied by 73-seat-late.rules, so a 99- rule never runs.
+    install -Dm644 data/udev/70-ghub4linux.rules \
+        "$pkgdir/usr/lib/udev/rules.d/70-ghub4linux.rules"
+
 }

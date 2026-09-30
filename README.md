@@ -52,7 +52,7 @@ ghub4linux
 #### 1. Install system dependencies
 
 ```bash
-sudo pacman -S python python-gobject gtk4 libadwaita hidapi
+sudo pacman -S python python-gobject gtk4 libadwaita
 ```
 
 #### 2. Clone the repository
@@ -81,8 +81,7 @@ bash install.sh
 ```bash
 sudo apt install \
     python3 python3-venv python3-gi python3-gi-cairo \
-    gir1.2-gtk-4.0 gir1.2-adw-1 \
-    libhidapi-hidraw0
+    gir1.2-gtk-4.0 gir1.2-adw-1
 ```
 
 #### 2. Clone the repository
@@ -110,21 +109,28 @@ By default, HID devices are only accessible by root.
 Create the following udev rule to allow your user to access Logitech devices:
 
 ```bash
-sudo tee /etc/udev/rules.d/99-logitech-hid.rules <<'EOF'
-# Logitech HID devices
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", MODE="0660", GROUP="input"
+sudo tee /etc/udev/rules.d/70-logitech-hid.rules <<'EOF'
+# Logitech HID devices (hidraw + HID++)
+KERNEL=="hidraw*", ATTRS{idVendor}=="046d", MODE="0660", GROUP="input", TAG+="uaccess"
 EOF
 
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
-Add your user to the `input` group if not already a member:
+> **The file must be named `70-…`, not `99-…`.** The access for the logged-in
+> user is granted by the ACL that `73-seat-late.rules` applies to anything
+> carrying `TAG+="uaccess"`. A rule numbered `99-` is processed *after* it, so
+> it is never applied and the device stays root-only with no error message.
+
+Verify the rule took effect — you should see your own user with `rw`:
 
 ```bash
-sudo usermod -aG input $USER
-# Log out and back in for the group change to take effect
+getfacl /dev/hidraw*
 ```
+
+No group membership and no re-login are needed: the ACL is applied by the
+desktop session, so `MODE`/`GROUP` only matter for non-seat access (e.g. SSH).
 
 ---
 

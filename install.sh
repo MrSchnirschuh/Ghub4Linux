@@ -108,7 +108,31 @@ echo "==> Installing icon to $ICON_DIR …"
 $INSTALL_CMD mkdir -p "$ICON_DIR"
 $INSTALL_CMD cp "$ICON_SRC" "$ICON_DIR/"
 
-# ── 5. Refresh desktop / icon cache ───────────────────────────────────────────
+# ── 5. Install the udev rule (HID access without root) ────────────────────────
+# Without this rule the devices are root-only and the application finds
+# nothing.  The rule is installed on request, since it needs root.
+UDEV_SRC="$SCRIPT_DIR/data/udev/70-ghub4linux.rules"
+if [ -f "$UDEV_SRC" ]; then
+    UDEV_DEST="/etc/udev/rules.d/70-ghub4linux.rules"
+    if [ -f "$UDEV_DEST" ] && cmp -s "$UDEV_SRC" "$UDEV_DEST"; then
+        echo "==> udev rule already up to date."
+    elif [ -w /etc/udev/rules.d ] || $SYSTEM; then
+        echo "==> Installing udev rule to /etc/udev/rules.d …"
+        $INSTALL_CMD cp "$UDEV_SRC" "$UDEV_DEST"
+        $INSTALL_CMD udevadm control --reload-rules || true
+        $INSTALL_CMD udevadm trigger || true
+    else
+        echo ""
+        echo "   ⚠  The udev rule is not installed: $UDEV_DEST needs root."
+        echo "      Without it the application cannot open the devices."
+        echo "      Install it with:"
+        echo "        sudo cp $UDEV_SRC $UDEV_DEST"
+        echo "        sudo udevadm control --reload-rules && sudo udevadm trigger"
+        echo "      Then verify with: getfacl /dev/hidraw*"
+    fi
+fi
+
+# ── 6. Refresh desktop / icon cache ───────────────────────────────────────────
 if command -v update-desktop-database &>/dev/null; then
     echo "==> Updating desktop database …"
     $INSTALL_CMD update-desktop-database "$APP_DIR"

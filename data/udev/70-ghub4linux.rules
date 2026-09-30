@@ -1,0 +1,23 @@
+# ghub4linux udev rules for Logitech gaming peripherals
+#
+# Grants the logged-in user access to Logitech HID devices so the application
+# can talk HID++ to them without root.
+#
+# Two details decide whether this works at all:
+#
+#   * The ACL for the seated user comes from TAG+="uaccess", which is applied by
+#     73-seat-late.rules.  This file must therefore be installed with a number
+#     *below* 73 (hence 70-); a 99- rule is processed after the seat rules and
+#     is never applied, leaving the device root-only and printing no error.
+#   * MODE=0666 would open the devices to every local user.  uaccess grants the
+#     session user only, which is what MODE/GROUP below are a fallback for
+#     (useful over SSH, where no seat ACL exists).
+
+ACTION!="add|change", GOTO="ghub4linux_end"
+SUBSYSTEM!="hidraw", GOTO="ghub4linux_end"
+ATTRS{idVendor}!="046d", GOTO="ghub4linux_end"
+
+# Logitech HID interfaces (mice, keyboards, receivers, PowerPlay pads).
+MODE="0660", GROUP="input", TAG+="uaccess"
+
+LABEL="ghub4linux_end"
