@@ -7,9 +7,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gio, Gtk  # noqa: E402
 
 from ..core.device import BaseDevice  # noqa: E402
+from ..core.firmware import FirmwareCatalog, FirmwareCheck, check_firmware  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -106,14 +107,57 @@ class InfoPanel(Gtk.Box):
         firmware_label.set_halign(Gtk.Align.START)
         firmware_box.append(firmware_label)
 
-        update_btn = Gtk.Button(label="Check for Updates")
-        update_btn.connect("clicked", self._on_check_updates)
-        firmware_box.append(update_btn)
+        self.update_btn = Gtk.Button(label="Check for Updates")
+        self.update_btn.connect("clicked", self._on_check_updates)
+        firmware_box.append(self.update_btn)
 
         self.append(firmware_box)
 
+        # Result of the last check, so the panel can explain itself.
+        self.result_label = Gtk.Label(label="")
+        self.result_label.set_halign(Gtk.Align.START)
+        self.result_label.set_wrap(True)
+        self.result_label.add_css_class("dim-label")
+        self.result_label.set_visible(False)
+        self.append(self.result_label)
+
     def _on_check_updates(self, _button: Gtk.Button) -> None:
-        """Check for firmware updates."""
+        """Check the device against the firmware catalog fwupd maintains.
+
+        The check runs off the main loop: reading the LVFS catalog means
+        decompressing ~20 MB, which would visibly stall the window.
+        """
         logger.info("Checking for firmware updates")
-        # ponytail: stub — real check needs Logitech's firmware API endpoint
-        self.get_root().show_toast("Firmware update check: not yet implemented")
+        self.update_btn.set_sensitive(False)
+        self.update_btn.set_label("Checking…")
+        self._show_result("Reading the firmware catalog…")
+
+        def work(*_args: object) -> None:
+            """Runs in the worker thread; the result travels via the Task."""
+            task = _args[0]
+            assert isinstance(task, Gio.Task)
+            task.return_value(check_firmware(self.device, FirmwareCatalog()))
+
+        def done(_source: object, task: Gio.Task) -> None:
+            try:
+                check = task.propagate_value().value
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"Firmware check failed: {exc}")
+                self._show_result("Could not read the firmware catalog.")
+            else:
+                assert isinstance(check, FirmwareCheck)
+                self._show_result(check.message)
+            finally:
+                self.update_btn.set_sensitive(True)
+                self.update_btn.set_label("Check for Updates")
+
+        task = Gio.Task.new(None, None, done)
+        task.run_in_thread(work)
+
+    def _show_result(self, message: str) -> None:
+        """Show the outcome inside the panel (and as a toast when possible)."""
+        self.result_label.set_label(message)
+        self.result_label.set_visible(True)
+        root = self.get_root()
+        if root is not None and hasattr(root, "show_toast"):
+            root.show_toast(message)

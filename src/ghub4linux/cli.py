@@ -32,6 +32,7 @@ from .core.config import (
     _from_dict,
 )
 from .core.device import BaseDevice, DeviceCapability, DeviceManager
+from .core.firmware import FirmwareCatalog, check_firmware
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
 from .devices.powerplay import POWERPLAY_DEVICES, POWERPLAY_RECEIVER_HINTS
 from .devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
@@ -175,6 +176,29 @@ def cmd_battery(_manager: DeviceManager, device: BaseDevice, args: argparse.Name
     print(f"Level: {data['level']}% ({status})")
     if data["voltage"] is not None:
         print(f"Voltage: {data['voltage']:.3f}V")
+
+
+@_with_device
+def cmd_firmware(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+    """Check the device's firmware against the LVFS catalog.
+
+    Reports only — flashing G-series firmware requires vendor-signed images that
+    Logitech does not distribute for Linux, so this command never claims to
+    have updated anything.
+    """
+    check = check_firmware(device, FirmwareCatalog())
+    if args.json:
+        print(json.dumps(check.to_dict(), indent=2))
+        return
+
+    print(f"Installed: {check.current_version}")
+    if check.status == "update-available":
+        assert check.info is not None
+        print(f"Available: {check.info.latest_version}")
+        if check.info.release_date:
+            print(f"Released:  {check.info.release_date}")
+    print()
+    print(check.message)
 
 
 @_with_device
@@ -527,6 +551,11 @@ CLI_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, dict]
     ("list", "List connected devices", []),
     ("info", "Show device info", [("device_id", None, {"help": "Device ID (from list)"})]),
     ("battery", "Show battery status", [("device_id", None, {"help": "Device ID"})]),
+    (
+        "firmware",
+        "Check the device's firmware against Logitech's published catalog",
+        [("device_id", None, {"help": "Device ID (from list)"})],
+    ),
     (
         "dpi",
         "Get/set DPI settings",

@@ -170,8 +170,28 @@ ghub4linux-cli list
 ghub4linux-cli info 046d:407f:abc123
 ghub4linux-cli --json info 046d:407f:abc123        # i3blocks/polybar friendly
 ghub4linux-cli dpi 046d:407f:abc123 --dpi 1600
+ghub4linux-cli firmware 046d:407f:abc123           # firmware status vs. catalog
 ghub4linux-cli profile list 046d:407f:abc123
 ```
+
+## Firmware updates
+
+`ghub4linux-cli firmware` (and the **Check for Updates** button on a device's
+Info tab) answers two questions:
+
+* **Is there an update?** Logitech publishes official firmware through the
+  Linux Vendor Firmware Service, and identifies each device there with a
+  version-5 UUID over `USB\VID_046D&PID_xxxx` (documented in Logitech's own
+  [`fw_updates`](https://github.com/Logitech/fw_updates) repository). That UUID
+  is computed from the device's product ID and looked up in the LVFS catalog
+  that fwupd keeps on disk.
+* **Can this application install it?** No, and it will not pretend to. Logitech
+  ships G-series firmware only through G HUB on Windows; the LVFS catalog
+  carries Logitech firmware for Unifying receivers only. Flashing requires
+  vendor-signed images that are not publicly distributed, so the tool reports
+  and never writes to the device.
+
+If a device is not in the catalog, the check says so instead of guessing.
 
 ## Development
 
