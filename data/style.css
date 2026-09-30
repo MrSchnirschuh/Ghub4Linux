@@ -1,0 +1,167 @@
+/* ghub4linux — dark theme in the spirit of Logitech G HUB.
+ *
+ * G HUB is a near-black app: a very dark page background, slightly lighter
+ * raised panels, a single saturated accent, and heavy use of flat pill
+ * controls. Values below are chosen for contrast against those surfaces
+ * rather than pulled from Logitech's brand assets.
+ */
+
+:root {
+  --ghub-bg: #0e0f12;
+  --ghub-surface: #17191e;
+  --ghub-surface-raised: #1e2128;
+  --ghub-border: #2b2f38;
+  --ghub-text: #eef1f6;
+  --ghub-text-dim: #9aa4b2;
+  --ghub-accent: #00b8d4;
+}
+
+window,
+.background {
+  background-color: var(--ghub-bg);
+  color: var(--ghub-text);
+}
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+
+headerbar {
+  background-color: var(--ghub-bg);
+  border-bottom: 1px solid var(--ghub-border);
+  box-shadow: none;
+}
+
+headerbar .title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ── sidebar ─────────────────────────────────────────────────────────────── */
+
+.ghub-sidebar {
+  background-color: var(--ghub-surface);
+  border-right: 1px solid var(--ghub-border);
+}
+
+.ghub-sidebar-title {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ghub-text-dim);
+  margin: 16px 16px 8px 16px;
+}
+
+/* Device rows read as cards, not list items. */
+.ghub-device-row {
+  border-radius: 10px;
+  margin: 2px 8px;
+  border: 1px solid transparent;
+}
+
+.ghub-device-row:hover {
+  background-color: var(--ghub-surface-raised);
+}
+
+.ghub-device-row:selected,
+.ghub-device-row:selected:hover {
+  background-color: var(--ghub-surface-raised);
+  border-color: var(--ghub-accent);
+}
+
+.ghub-device-name {
+  font-weight: 600;
+}
+
+.ghub-device-meta {
+  font-size: 0.82em;
+  color: var(--ghub-text-dim);
+}
+
+/* ── device tiles on the home page ───────────────────────────────────────── */
+
+.ghub-tile {
+  background-color: var(--ghub-surface);
+  border: 1px solid var(--ghub-border);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 190px;
+}
+
+.ghub-tile:hover {
+  background-color: var(--ghub-surface-raised);
+  border-color: var(--ghub-accent);
+}
+
+.ghub-tile-name {
+  font-weight: 600;
+  font-size: 1.02em;
+}
+
+.ghub-page-title {
+  font-size: 1.7em;
+  font-weight: 700;
+}
+
+.ghub-section-title {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ghub-text-dim);
+}
+
+/* ── pill tabs, as G HUB uses along the top of a device page ─────────────── */
+
+.ghub-pill {
+  background-color: var(--ghub-surface-raised);
+  color: var(--ghub-text-dim);
+  border: 1px solid var(--ghub-border);
+  border-radius: 999px;
+  padding: 7px 18px;
+  margin: 0 4px;
+  font-weight: 600;
+  min-height: 0;
+}
+
+.ghub-pill:hover {
+  color: var(--ghub-text);
+  border-color: var(--ghub-accent);
+}
+
+.ghub-pill:checked,
+.ghub-pill:checked:hover {
+  background-color: var(--ghub-accent);
+  border-color: var(--ghub-accent);
+  color: #04141a;
+}
+
+/* ── panels ──────────────────────────────────────────────────────────────── */
+
+.ghub-panel-title {
+  font-size: 1.35em;
+  font-weight: 700;
+}
+
+.ghub-card {
+  background-color: var(--ghub-surface);
+  border: 1px solid var(--ghub-border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+button.suggested-action {
+  background-color: var(--ghub-accent);
+  color: #04141a;
+  font-weight: 700;
+}
+
+button.suggested-action:hover {
+  background-color: #22cdea;
+}
+
+.ghub-battery {
+  font-size: 0.85em;
+  color: var(--ghub-text-dim);
+}
+
+.ghub-battery-low {
+  color: #ff8f6b;
+}

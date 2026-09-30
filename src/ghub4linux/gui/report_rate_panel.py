@@ -32,7 +32,7 @@ class ReportRatePanel(Gtk.Box):
         self.set_margin_end(24)
 
         title = Gtk.Label(label="Polling Rate")
-        title.add_css_class("title-1")
+        title.add_css_class("ghub-panel-title")
         title.set_halign(Gtk.Align.START)
         self.append(title)
 

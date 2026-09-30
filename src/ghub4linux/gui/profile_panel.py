@@ -29,7 +29,7 @@ class ProfilePanel(Gtk.Box):
 
         # Title
         title = Gtk.Label(label="Profiles")
-        title.add_css_class("title-1")
+        title.add_css_class("ghub-panel-title")
         title.set_halign(Gtk.Align.START)
         self.append(title)
 
@@ -73,7 +73,7 @@ class ProfilePanel(Gtk.Box):
 
         # Application profiles section
         app_title = Gtk.Label(label="Application Profiles")
-        app_title.add_css_class("title-2")
+        app_title.add_css_class("ghub-section-title")
         app_title.set_halign(Gtk.Align.START)
         app_title.set_margin_top(24)
         self.append(app_title)

@@ -29,7 +29,7 @@ class DPIPanel(Gtk.Box):
 
         # Title
         title = Gtk.Label(label="DPI Settings")
-        title.add_css_class("title-1")
+        title.add_css_class("ghub-panel-title")
         title.set_halign(Gtk.Align.START)
         self.append(title)
 

@@ -29,7 +29,7 @@ class InfoPanel(Gtk.Box):
 
         # Title
         title = Gtk.Label(label="Device Information")
-        title.add_css_class("title-1")
+        title.add_css_class("ghub-panel-title")
         title.set_halign(Gtk.Align.START)
         self.append(title)
 
@@ -65,7 +65,7 @@ class InfoPanel(Gtk.Box):
 
         # Battery section
         battery_title = Gtk.Label(label="Battery")
-        battery_title.add_css_class("title-2")
+        battery_title.add_css_class("ghub-section-title")
         battery_title.set_halign(Gtk.Align.START)
         battery_title.set_margin_top(24)
         self.append(battery_title)
@@ -96,7 +96,7 @@ class InfoPanel(Gtk.Box):
 
         # Firmware section
         firmware_title = Gtk.Label(label="Firmware")
-        firmware_title.add_css_class("title-2")
+        firmware_title.add_css_class("ghub-section-title")
         firmware_title.set_halign(Gtk.Align.START)
         firmware_title.set_margin_top(24)
         self.append(firmware_title)
