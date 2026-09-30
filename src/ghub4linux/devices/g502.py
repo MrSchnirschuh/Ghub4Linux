@@ -171,7 +171,6 @@ class G502Device(BaseDevice):
         from ..core.hidpp import (
             FEATURE_ADJUSTABLE_DPI,
         )
-        from ..core.rgb import ColorLedEffects
 
         self._features = self.discover_features()
         self._dpi_feature_index = self._features.get(FEATURE_ADJUSTABLE_DPI)
@@ -406,7 +405,12 @@ class G502Device(BaseDevice):
             else:
                 results.append(
                     self._rgb.set_effect_by_name(
-                        zone_index, effect.effect_type, color, duration_ms=effect.speed
+                        zone_index,
+                        effect.effect_type,
+                        color,
+                        # The model stores a speed (higher = faster); the
+                        # wire wants a period in milliseconds.
+                        speed=effect.speed,
                     )
                 )
 

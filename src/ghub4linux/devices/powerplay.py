@@ -154,11 +154,15 @@ class Powerplay(BaseDevice):
             applied = self._rgb.set_off(0)
         else:
             effect = settings.effect
+            # The model stores a speed (higher = faster); the wire wants a
+            # period, so it is converted here. Passing the speed through
+            # unconverted used to invert the control and make the slowest
+            # setting the shortest, fastest-looking animation.
             applied = self._rgb.set_effect_by_name(
                 0,
                 effect.effect_type,
                 (effect.color.red, effect.color.green, effect.color.blue),
-                duration_ms=effect.speed,
+                speed=effect.speed,
             )
 
         if not applied:
@@ -184,7 +188,7 @@ class Powerplay(BaseDevice):
             target.index,
             effect.effect_type,
             (effect.color.red, effect.color.green, effect.color.blue),
-            duration_ms=effect.speed,
+            speed=effect.speed,
         )
 
     # ── info helpers ─────────────────────────────────────────────────────────

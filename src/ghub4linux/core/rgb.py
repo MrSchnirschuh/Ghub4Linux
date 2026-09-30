@@ -48,6 +48,7 @@ import logging
 import time
 
 from .hid import HIDConnection
+from .speed import period_range_for, speed_for_effect
 
 logger = logging.getLogger(__name__)
 
@@ -449,18 +450,25 @@ class ColorLedEffects:
         return bytes(params)
 
     def _clamp_period(self, effect: ColorLedEffect, duration_ms: int | None) -> int:
-        """Return a period the device accepts.
+        """Return a period the effect accepts.
 
-        The spec requires the period to be a multiple of the effect's advertised
-        period, so a value outside that grid is snapped onto it rather than sent
-        and ignored.
+        Two independent constraints apply, and both were being violated:
+
+        * Each effect has its own accepted range.  Cycling below roughly 4000 ms
+          does not merely run fast, the firmware ignores the parameter and the
+          LED stays on the last colour — the "cycling does not work" report.
+        * The specification requires the period to be a multiple of the value
+          the device advertises in ``effectPeriod``, so the result is snapped
+          onto that grid rather than sent and half-ignored.
         """
-        if not duration_ms:
-            return effect.period or 1000
-        if effect.period > 1:
-            steps = max(1, round(duration_ms / effect.period))
-            return min(0xFFFF, steps * effect.period)
-        return min(0xFFFF, duration_ms)
+        lowest, highest = period_range_for(effect.effect_id)
+        wanted = duration_ms if duration_ms else effect.period or lowest
+        wanted = max(lowest, min(highest, wanted))
+
+        if effect.period > 1 and effect.period <= wanted:
+            steps = max(1, round(wanted / effect.period))
+            wanted = steps * effect.period
+        return max(lowest, min(highest, min(0xFFFF, wanted)))
 
     def set_effect(
         self,
@@ -554,11 +562,17 @@ class ColorLedEffects:
         zone_index: int,
         name: str,
         color: tuple[int, int, int] = (255, 255, 255),
+        speed: int = 50,
         duration_ms: int | None = None,
         waveform: int = WAVEFORM_SINE,
         intensity: int = 100,
     ) -> bool:
-        """Apply the config effect called *name* to one zone."""
+        """Apply the config effect called *name* to one zone.
+
+        *speed* is the UI value (0-100, higher is faster) and is converted into a
+        period inside the effect's own accepted range.  *duration_ms* overrides
+        that with an explicit period when a caller has one.
+        """
         zone = self.zone(zone_index)
         if zone is None:
             return False
@@ -566,6 +580,8 @@ class ColorLedEffects:
         if effect is None:
             logger.warning(f"zone {zone_index} has no effect for '{name}'")
             return False
+        if duration_ms is None:
+            duration_ms = speed_for_effect(effect.effect_id, speed)
         return self.set_effect(
             zone_index,
             effect.effect_id,
