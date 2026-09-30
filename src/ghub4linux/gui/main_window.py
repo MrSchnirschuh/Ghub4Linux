@@ -163,6 +163,13 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _scan_devices(self) -> bool:
         """Scan for connected devices and refresh the sidebar."""
+        # Remember the selection: a refresh must not throw the user back to the
+        # empty state when the device is still there.
+        selected_id = None
+        selected_row = self.device_list.get_selected_row()
+        if isinstance(selected_row, DeviceRow):
+            selected_id = selected_row.device.device_id
+
         # Clear existing device list
         while True:
             row = self.device_list.get_row_at_index(0)
@@ -173,7 +180,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # scan_devices() creates device objects and calls device.connect()
         devices = self.device_manager.scan_devices()
-        logger.info(f"Device scan complete: {len(devices)} new device(s) found")
+        logger.info(f"Device scan found {len(devices)} device(s)")
 
         for device in devices:
             logger.info(
@@ -181,6 +188,17 @@ class MainWindow(Adw.ApplicationWindow):
             )
             row = DeviceRow(device)
             self.device_list.append(row)
+
+        if not devices:
+            self.content_stack.set_visible_child_name("empty")
+        elif selected_id is not None:
+            for index, device in enumerate(devices):
+                if device.device_id == selected_id:
+                    self.device_list.select_row(self.device_list.get_row_at_index(index))
+                    break
+            else:
+                # The selected device is gone; do not keep a stale panel open.
+                self.content_stack.set_visible_child_name("empty")
 
         return False
 

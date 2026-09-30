@@ -374,9 +374,23 @@ class DeviceManager:
             self._device_registry[product_id] = device_class
 
     def scan_devices(self) -> list[BaseDevice]:
-        """Scan for connected devices and attempt to connect to new ones."""
+        """Scan for connected devices and return every device found.
+
+        A device already known from an earlier scan is returned as well, not
+        just the newly added ones: callers repopulate their device list from
+        this result, so returning only the delta would empty the list on a
+        refresh. Re-scanning is also how removal is noticed — a device that is
+        gone from the HID enumeration is dropped from the registry.
+        """
         hid_devices = self._hid_manager.find_logitech_devices()
-        new_devices = []
+        present_ids = {hid_device.device_id for hid_device in hid_devices}
+
+        # Forget devices that are no longer enumerated, so a reconnect or a
+        # different device on the same receiver path is not shadowed by a stale
+        # entry.
+        for stale_id in [d for d in self._devices if d not in present_ids]:
+            logger.info(f"Device gone: {self._devices[stale_id].name} ({stale_id})")
+            self._devices.pop(stale_id, None)
 
         for hid_device in hid_devices:
             device_id = hid_device.device_id
@@ -404,13 +418,17 @@ class DeviceManager:
             device.connect()
 
             self._devices[device_id] = device
-            new_devices.append(device)
             logger.info(
                 f"Found device: {device.name} (PID: {hid_device.product_id:#06x},"
                 f" connected: {device.is_connected})"
             )
 
-        return new_devices
+        # Report in enumeration order so the sidebar is stable between scans.
+        return [
+            self._devices[hid_device.device_id]
+            for hid_device in hid_devices
+            if hid_device.device_id in self._devices
+        ]
 
     def get_device(self, device_id: str) -> BaseDevice | None:
         """Get a device by ID."""

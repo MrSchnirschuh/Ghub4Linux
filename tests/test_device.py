@@ -367,3 +367,58 @@ class TestDeviceManager:
         assert devices[0].device_id == mock_hid_device.device_id
         assert devices[0].is_connected is False
         assert manager.get_device(mock_hid_device.device_id) is devices[0]
+
+    def test_rescan_returns_known_devices_too(self, monkeypatch, mock_hid_device):
+        """A second scan must return the devices it already knows.
+
+        The GUI and the CLI rebuild their device list from this return value,
+        so returning only newly added devices emptied the list on a refresh.
+        """
+        from ghub4linux.core import hid as hid_module
+        from ghub4linux.core.config import AppConfig
+
+        class SingleHIDManager:
+            def find_logitech_devices(self):
+                return [mock_hid_device]
+
+        monkeypatch.setattr(hid_module, "HIDManager", SingleHIDManager)
+        manager = DeviceManager(AppConfig())
+        manager._hid_manager = SingleHIDManager()
+        manager.register_device_class(0x1234, MockDevice)
+
+        first = manager.scan_devices()
+        second = manager.scan_devices()
+        third = manager.scan_devices()
+
+        assert [d.device_id for d in first] == [mock_hid_device.device_id]
+        assert [d.device_id for d in second] == [mock_hid_device.device_id]
+        assert [d.device_id for d in third] == [mock_hid_device.device_id]
+        # The same object is reused, not reconnected on every scan.
+        assert second[0] is first[0]
+
+    def test_rescan_drops_devices_that_disappeared(self, monkeypatch, mock_hid_device):
+        """A device that is unplugged must leave the registry on the next scan.
+
+        Without this, a stale entry would shadow a reconnected device that
+        reports a different device_id.
+        """
+        from ghub4linux.core import hid as hid_module
+        from ghub4linux.core.config import AppConfig
+
+        devices = [mock_hid_device]
+
+        class MutableHIDManager:
+            def find_logitech_devices(self):
+                return list(devices)
+
+        monkeypatch.setattr(hid_module, "HIDManager", MutableHIDManager)
+        manager = DeviceManager(AppConfig())
+        manager._hid_manager = MutableHIDManager()
+        manager.register_device_class(0x1234, MockDevice)
+
+        assert len(manager.scan_devices()) == 1
+
+        devices.clear()
+
+        assert manager.scan_devices() == []
+        assert manager.get_device(mock_hid_device.device_id) is None
