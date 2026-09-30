@@ -332,34 +332,46 @@ def _resolve_product_ids(devices: list[HIDDevice]) -> list[HIDDevice]:
     also exposes its own USB node while it is awake, and that node carries the
     real product ID (0x40b8 for a PRO X 2 DEX).  Name is the join key because
     the wireless endpoint reports no serial on the receiver path.
+
+    A direct node that never answered HID++ is dropped when the same product is
+    already represented by an identified endpoint.  Such a node is the
+    peripheral's own USB interface caught in a power-saving state, and keeping
+    it would list the same mouse twice — once as an anonymous ``046d:407f:``
+    entry and once by name.
     """
     real_ids: dict[str, int] = {}
+    named_pids: dict[int, str] = {}
     for device in devices:
-        if device.identified and not device.is_receiver_endpoint:
-            real_ids[device.product.strip().lower()] = device.product_id
+        if device.identified:
+            key = device.product.strip().lower()
+            if not device.is_receiver_endpoint:
+                real_ids[key] = device.product_id
+            named_pids.setdefault(device.product_id, key)
 
     resolved: list[HIDDevice] = []
     for device in devices:
-        if not device.is_receiver_endpoint or not device.identified:
+        if not device.identified:
+            # Drop an anonymous direct node whose PID already has a named
+            # endpoint elsewhere; keep it otherwise (a driver may still match
+            # it, and silently hiding a device would be worse).
+            if not device.is_receiver_endpoint and device.product_id in named_pids:
+                continue
             resolved.append(device)
             continue
+        if not device.is_receiver_endpoint:
+            resolved.append(device)
+            continue
+
         real = real_ids.get(device.product.strip().lower())
         if real is None or real == device.product_id:
             resolved.append(device)
             continue
-        # The peripheral's own node is the one worth talking to: it carries the
-        # real product ID and does not share the dongle's HID++ queue.
-        own = next(
-            (
-                d
-                for d in devices
-                if not d.is_receiver_endpoint
-                and d.identified
-                and d.product.strip().lower() == device.product.strip().lower()
-            ),
-            None,
-        )
-        resolved.append(own if own is not None else replace(device, product_id=real))
+        # The peripheral answers on the dongle's node with the dongle's PID;
+        # hand it its own ID so driver lookup matches, and leave the
+        # peripheral's own node in the list.  The two entries carry the same
+        # name, so the deduplication step collapses them and keeps the quieter
+        # receiver path.
+        resolved.append(replace(device, product_id=real))
     return resolved
 
 
