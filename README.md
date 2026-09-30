@@ -178,10 +178,14 @@ ghub4linux-cli profile list 046d:407f:abc123
 Run tests and lint locally with the provided `Makefile`:
 
 ```bash
-make test   # pytest
-make lint   # ruff check + format check
-make format # auto-format with ruff
+make ci      # everything CI runs: mypy, ruff check, ruff format, pytest
+make test    # pytest
+make lint    # type check + ruff check + format check
+make format  # auto-format with ruff
 ```
+
+`make lint` includes the type check on purpose, so a local run cannot report
+success on code that CI will reject.
 
 ## License
 
