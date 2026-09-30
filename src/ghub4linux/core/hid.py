@@ -184,12 +184,19 @@ class HIDConnection:
         function_id: int,
         params: bytes = b"",
         device_index: int | None = None,
+        timeout: float | None = None,
     ) -> bytes:
-        """Send a HID++ feature request and get the response."""
+        """Send a HID++ feature request and get the response.
+
+        *timeout* overrides the link's default wait.  Sector operations on
+        OnboardProfiles (0x8100) need a longer one: the device answers
+        0x8100's info command immediately but needs seconds for a sector read,
+        so the default made those commands look unsupported.
+        """
         if device_index is not None:
             self.link.device_index = device_index
         try:
-            return self.link.request(feature_index, function_id, params)
+            return self.link.request(feature_index, function_id, params, timeout=timeout)
         except HIDPPUnsupportedError:
             # An unsupported feature is not an error worth propagating: callers
             # treat an empty response as "the device said no".
