@@ -23,7 +23,7 @@ sysfs; the HID++ conversation runs over a file descriptor (see
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from .hidpp import (
     DEVICE_INDEX_DIRECT,
@@ -238,8 +238,10 @@ class HIDManager:
                 seen.add(key)
                 devices.append(endpoint)
 
-        devices = _resolve_product_ids(devices)
-        return _deduplicate(devices)
+        # Order matters: drop the silent duplicate of a device that answered
+        # elsewhere, then collapse the two paths of a device that answered on
+        # both.
+        return _deduplicate(_resolve_product_ids(devices))
 
     def _endpoints(self, node: HidrawDevice) -> list[HIDDevice]:
         """Resolve the peripherals reachable through one hidraw node."""
@@ -273,6 +275,7 @@ class HIDManager:
                     # device into an anonymous PID entry.
                     name = link.device_name()
                 features = link.discover_features()
+                product_id = link.device_product_id() or node.product_id
             except HIDPPError as exc:
                 logger.debug(f"{node.node} idx {index:#04x}: {exc}")
                 continue
@@ -292,7 +295,7 @@ class HIDManager:
             endpoints.append(
                 HIDDevice(
                     vendor_id=node.vendor_id,
-                    product_id=node.product_id,
+                    product_id=product_id,
                     serial_number=node.serial or _endpoint_serial(name or ""),
                     manufacturer="Logitech",
                     product=display,
@@ -324,80 +327,63 @@ def _is_internal(name: str) -> bool:
 
 
 def _resolve_product_ids(devices: list[HIDDevice]) -> list[HIDDevice]:
-    """Replace a dongle's product ID with the paired peripheral's own ID.
+    """Collapse the several paths that reach the same physical device.
 
     A mouse paired to a receiver is reachable at index ``0x01`` on the dongle's
-    node and reports the *dongle's* USB product ID there (the receiver's own
-    0xc54d / 0xc53a), so driver lookup by PID would miss it.  The same mouse
-    also exposes its own USB node while it is awake, and that node carries the
-    real product ID (0x40b8 for a PRO X 2 DEX).  Name is the join key because
-    the wireless endpoint reports no serial on the receiver path.
+    node and reports the *dongle's* USB product ID there (0xc54d / 0xc53a), so
+    driver lookup by PID would miss it.  The real ID is read out of the
+    peripheral's DeviceInfo entity at enumeration time, which fixes the PID on
+    the receiver path itself.
 
-    A direct node that never answered HID++ is dropped when the same product is
-    already represented by an identified endpoint.  Such a node is the
-    peripheral's own USB interface caught in a power-saving state, and keeping
-    it would list the same mouse twice — once as an anonymous ``046d:407f:``
-    entry and once by name.
+    What is left is the duplicate itself: the same mouse also exposes its own
+    USB node, and when it has just woken from power saving that node is present
+    but does not answer HID++ — it would show up as an anonymous ``046d:407f:``
+    entry next to the named one.  So an endpoint that did not answer is dropped
+    when an identified endpoint for the same product and node index exists.
     """
-    real_ids: dict[str, int] = {}
-    named_pids: dict[int, str] = {}
-    for device in devices:
-        if device.identified:
-            key = device.product.strip().lower()
-            if not device.is_receiver_endpoint:
-                real_ids[key] = device.product_id
-            named_pids.setdefault(device.product_id, key)
+    identified_pids = {device.product_id for device in devices if device.identified}
 
     resolved: list[HIDDevice] = []
     for device in devices:
         if not device.identified:
-            # Drop an anonymous direct node whose PID already has a named
-            # endpoint elsewhere; keep it otherwise (a driver may still match
-            # it, and silently hiding a device would be worse).
-            if not device.is_receiver_endpoint and device.product_id in named_pids:
+            # A node that did not answer HID++ while another endpoint already
+            # reports the same product ID is the same physical device — its own
+            # USB node caught in a power-saving state.  Keeping it would list
+            # the mouse twice, once as an anonymous ``046d:407f:`` entry.
+            if device.product_id in identified_pids:
                 continue
+            # A device nothing else represents is kept: hiding it would be
+            # worse than an anonymous entry a driver might still match.
             resolved.append(device)
             continue
-        if not device.is_receiver_endpoint:
-            resolved.append(device)
-            continue
-
-        real = real_ids.get(device.product.strip().lower())
-        if real is None or real == device.product_id:
-            resolved.append(device)
-            continue
-        # The peripheral answers on the dongle's node with the dongle's PID;
-        # hand it its own ID so driver lookup matches, and leave the
-        # peripheral's own node in the list.  The two entries carry the same
-        # name, so the deduplication step collapses them and keeps the quieter
-        # receiver path.
-        resolved.append(replace(device, product_id=real))
+        resolved.append(device)
     return resolved
 
 
 def _deduplicate(devices: list[HIDDevice]) -> list[HIDDevice]:
-    """Collapse the same physical device reachable through several paths.
+    """Collapse the same physical device when *both* of its paths answered.
 
-    A wireless mouse on a PowerPlay pad is reachable twice — once through the
-    receiver node and once through its own USB node.  The direct node is the
-    less useful of the two: it carries the input-report flood (several hundred
-    frames per second), which starves HID++ replies.  So when the same product
-    ID shows up on more than one path, the endpoint that actually answered
-    HID++ with a device name wins, and the rest are dropped.
+    A wireless mouse is reachable through its dongle and through its own USB
+    node.  When it is awake, both answer and both carry the same device name;
+    only the receiver path should remain, because the direct node carries the
+    input-report flood (hundreds of frames per second) that starves HID++
+    replies.  A silent direct node is already gone by this point — it is
+    removed earlier, together with the paths that carry no name at all.
     """
 
-    def score(device: HIDDevice) -> tuple[int, int]:
-        # Prefer a quiet receiver path over the input-flooded direct node; the
-        # receiver answers HID++ immediately, so the GUI and CLI stay snappy.
-        return (1 if device.is_receiver_endpoint else 0, 1 if device.identified else 0)
-
     def identity(device: HIDDevice) -> str:
-        # A wireless endpoint reports no serial, but its HID++ device name is
-        # the real identity — the same mouse seen on the receiver node and on
-        # its own USB node answers with the same name.
+        # The HID++ device name is the real identity for a wireless endpoint,
+        # which reports no serial.  Paths without a name stay separate.
         if device.identified:
             return device.product.strip().lower()
         return f"{device.product_id:04x}:{device.node}:{device.device_index}"
+
+    def prefer(candidate: HIDDevice, current: HIDDevice) -> bool:
+        """True when *candidate* is the better path to the same device."""
+        return (
+            1 if candidate.is_receiver_endpoint else 0,
+            1 if candidate.identified else 0,
+        ) > (1 if current.is_receiver_endpoint else 0, 1 if current.identified else 0)
 
     best: dict[str, HIDDevice] = {}
     order: list[str] = []
@@ -407,7 +393,7 @@ def _deduplicate(devices: list[HIDDevice]) -> list[HIDDevice]:
         if current is None:
             best[key] = device
             order.append(key)
-        elif score(device) > score(current):
+        elif prefer(device, current):
             best[key] = device
     return [best[key] for key in order]
 

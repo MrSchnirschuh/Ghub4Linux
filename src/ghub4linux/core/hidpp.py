@@ -391,6 +391,43 @@ class HIDPP:
         """Return the HID++ protocol version via a 1.0 ping."""
         return self.ping()
 
+    def device_product_id(self) -> int | None:
+        """Read the device's own USB product ID from DeviceInfo (0x0003).
+
+        On a receiver endpoint the HID++ header carries the *dongle's* product
+        ID (0xc54d / 0xc53a), so the peripheral looks like its own dongle.  The
+        DeviceInfo entity for the peripheral carries the real ID, which is what
+        a driver lookup needs.
+
+        Measured on a G502 behind a PowerPlay pad and on a PRO X 2 DEX behind a
+        Lightspeed receiver: the entity fields are ``type, unitId, transport,
+        modelId[4] (LE), version[3], pid_hi, pid_lo`` — the entity with
+        ``type == 0`` is the peripheral, and its PID appears as
+        ``.. 01 <hi> <lo>`` (``40 7f`` / ``40 b8`` for these two mice).
+        """
+        index = self.feature_index(FEATURE_DEVICE_INFO)
+        if not index:
+            return None
+        try:
+            count = self.request(index, 0x00)[4]
+        except HIDPPError:
+            return None
+
+        for entity in range(min(count, 8)):
+            try:
+                payload = bytes(self.request(index, 0x01, bytes([entity]))[4:])
+            except HIDPPError:
+                continue
+            if len(payload) < 11 or payload[0] != 0:
+                continue
+            # The PID is the last big-endian u16 of the entity descriptor and
+            # must look like a Logitech product ID; anything else is a
+            # different firmware revision field.
+            candidate = (payload[9] << 8) | payload[10]
+            if 0x2000 <= candidate <= 0xFFFF:
+                return candidate
+        return None
+
 
 def probe(
     node: str, indexes: tuple[int, ...] = (DEVICE_INDEX_DIRECT, DEVICE_INDEX_RECEIVER_1)
