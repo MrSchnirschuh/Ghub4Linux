@@ -147,6 +147,35 @@ class TestFraming:
             link.request(0x05, 0x03, b"\x00")
         assert link._fake.written[-1][3] >> 4 == 0x03
 
+    def test_every_nibble_function_is_carried(self, link):
+        """Ordinary features number their functions 0x0-0xF; none may collapse.
+
+        Masking the function instead of shifting it would turn every one of
+        these into 0x00 and silently break every feature that is not
+        OnboardProfiles.
+        """
+        for function in range(0x00, 0x10):
+            with pytest.raises(HIDPPError):
+                link.request(0x05, function, b"\x00")
+            assert link._fake.written[-1][3] >> 4 == function
+
+    def test_eight_bit_commands_are_carried(self, link):
+        """OnboardProfiles (0x8100) uses an 8-bit command space.
+
+        These are already aligned, so they must pass through untouched — and
+        shifting them overflowed a byte, which is why the feature could never be
+        addressed at all.
+        """
+        for command in (0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0xB0, 0xC0):
+            with pytest.raises(HIDPPError):
+                link.request(0x09, command, b"\x00")
+            assert link._fake.written[-1][3] >> 4 == command >> 4
+
+    def test_a_shifted_eight_bit_command_would_overflow(self):
+        """The original defect, pinned: 0x70 cannot be shifted into a byte."""
+        with pytest.raises(ValueError):
+            bytes([(0x70 << 4) | 0x1])
+
     def test_software_id_is_never_zero(self, link):
         # 0x00 is reserved for the host and must never be used for a request.
         for _ in range(4):

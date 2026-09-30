@@ -169,6 +169,7 @@ class DeviceInfo:
     dpi_step: int
     button_count: int
     has_onboard_profiles: bool
+    has_led_control: bool
 
 
 @dataclass

@@ -141,6 +141,7 @@ class Powerplay(BaseDevice):
             dpi_step=0,
             button_count=0,
             has_onboard_profiles=False,
+            has_led_control=False,
         )
 
     # ── lighting ─────────────────────────────────────────────────────────────

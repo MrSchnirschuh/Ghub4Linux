@@ -30,6 +30,7 @@ from ..core.hid import (
     HIDDevice,
 )
 from ..core.hidpp import FEATURE_REPORT_RATE
+from ..core.led import LedControl
 from ..core.rgb import ColorLedEffects
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ class G502Device(BaseDevice):
         self._battery_feature_index: int | None = None
         # colorLedEffects (0x8070) reader, set up in _query_features.
         self._rgb: ColorLedEffects | None = None
+        # LEDControl (0x1300) reader for the status indicators, also set up in
+        # _query_features.  It is initialised here because DeviceInfo can be
+        # requested before the features have been queried.
+        self._led: LedControl | None = None
         self._features: dict[int, int] = {}
 
     def _init_device(self) -> None:
@@ -179,6 +184,13 @@ class G502Device(BaseDevice):
         self._battery_feature_index = (
             self._features.get(0x1004) or self._features.get(0x1000) or self._features.get(0x1001)
         )
+        # LEDControl (0x1300) drives the status indicators: the DPI bars, the
+        # profile light and the battery gauge.  It carries no colour — that comes
+        # from 0x8070 below — but it decides *how many* bars are lit.
+        led_index = self._features.get(0x1300)
+        self._led = (
+            LedControl(self._connection, led_index) if led_index and self._connection else None
+        )
         # The G502 Lightspeed drives its lighting through colorLedEffects
         # (0x8070) — *not* the newer rgbEffects (0x8071), which it does not have.
         # Keying on 0x8071 is why the app previously showed no lighting settings
@@ -226,6 +238,7 @@ class G502Device(BaseDevice):
             dpi_step=dpi_step or self.DPI_STEP,
             button_count=button_count or self.BUTTON_COUNT,
             has_onboard_profiles=has_onboard_profiles,
+            has_led_control=self._led is not None,
         )
 
     def _get_firmware_version(self) -> str:

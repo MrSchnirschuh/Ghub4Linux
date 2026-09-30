@@ -299,12 +299,21 @@ class HIDPP:
         long_msg = len(params) > 3
         size = LONG_LEN if long_msg else SHORT_LEN
         sw_id = self._next_sw_id()
+        # Byte 3 packs the function and the software id.  Two shapes exist:
+        # most features use a nibble function (0x0-0xF) which has to be shifted
+        # into the high nibble, while some — notably OnboardProfiles 0x8100 —
+        # use an 8-bit command space (0x00, 0x10, 0x20 … 0xD0) that is already
+        # aligned and must not be shifted at all.  Shifting those raised
+        # ValueError, so 0x8100 could never be spoken to; masking a nibble
+        # instead would collapse every ordinary function to zero.  Pick by
+        # whether the value fits in a nibble.
+        command = (function << 4) if function <= 0x0F else (function & 0xF0)
         header = bytes(
             [
                 HIDPP_LONG if long_msg else HIDPP_SHORT,
                 self.device_index,
                 feature_index,
-                (function << 4) | sw_id,
+                command | sw_id,
             ]
         )
         packet = header + params

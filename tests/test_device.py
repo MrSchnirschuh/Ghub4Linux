@@ -45,6 +45,7 @@ class MockDevice(BaseDevice):
             max_dpi=16000,
             dpi_step=50,
             button_count=8,
+            has_led_control=False,
             has_onboard_profiles=True,
         )
 
@@ -290,6 +291,7 @@ class TestDeviceManager:
                     max_dpi=0,
                     dpi_step=0,
                     button_count=0,
+                    has_led_control=False,
                     has_onboard_profiles=False,
                 )
 
