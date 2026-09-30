@@ -161,17 +161,26 @@ class LedControl:
 
     # ── plumbing ─────────────────────────────────────────────────────────────
     def _call(self, function: int, args: bytes = b"") -> bytes | None:
-        """Send one request; a non-answer means the device did not reply.
+        """Send one request; ``None`` means the device did not answer usefully.
 
         The report length follows from the payload: ``SetState`` sends nine
         bytes and therefore goes out as a long report on its own, while the
         one-byte getters stay short.
+
+        An **empty** reply is treated as no reply, not as success.  The
+        transport converts an error frame — which is how the device rejects an
+        invalid argument — into ``b""``, and the earlier version only checked for
+        ``None``, so a rejected write was reported as applied.
         """
         try:
-            return self._connection.send_feature_request(self.index, function, args)
+            frame = self._connection.send_feature_request(self.index, function, args)
         except Exception as exc:  # noqa: BLE001 - transport-specific
             logger.debug(f"0x1300 fn{function} got no answer: {exc}")
             return None
+        if not frame:
+            logger.debug(f"0x1300 fn{function} was rejected or not answered")
+            return None
+        return frame
 
     # ── discovery ────────────────────────────────────────────────────────────
     def refresh(self) -> list[LedInfo]:
@@ -240,11 +249,20 @@ class LedControl:
 
     # ── reading ──────────────────────────────────────────────────────────────
     def get_state(self, index: int) -> LedState | None:
-        """Read one logical LED's current state."""
+        """Read one logical LED's current state.
+
+        The mode is a **little-endian u16** at ``frame[5:7]``.  Verified from the
+        device's own replies: LED0 answers ``00 01 00`` and LED1 ``01 02 00``,
+        where only the little-endian reading yields a legal mode (0x0001 Off,
+        0x0002 On) — reading big-endian gives 0x0100/0x0200, which are not modes
+        at all.  ``frame[4]`` echoes the LED index and must not be read as the
+        mode.  Note the asymmetry, which is in the hardware: the GetInfo
+        capability mask *is* big-endian while this field is not.
+        """
         frame = self._call(0x04, bytes([index]))
-        if not frame or len(frame) < 6:
+        if not frame or len(frame) < 7:
             return None
-        return LedState(index=frame[4], mode=frame[5])
+        return LedState(index=frame[4], mode=int.from_bytes(bytes(frame[5:7]), "little"))
 
     def get_nv_config(self, index: int) -> int | None:
         """Read one LED's non-volatile configuration byte."""
@@ -261,8 +279,16 @@ class LedControl:
 
         *display_index* selects which step is shown — the number of bars for the
         battery LED, the DPI slot for the DPI LED — and must be 1..5 or 0xFF.
-        The mode is sent big-endian, which is what this hardware accepts; the
-        little-endian form is rejected with error 0x02.
+
+        On the mode field's byte order the sources disagree — one writes it
+        little-endian (matching what the device reports back) and another
+        big-endian — and this implementation sends **big-endian**, which is the
+        variant that was measured to work: with the firmware owning the LEDs
+        first, writing 0x0002 as ``00 02`` turned the DPI indicator from Off to
+        On, confirmed by reading the state back.  The little-endian form has not
+        been observed on this hardware either way, so this is an empirical
+        choice and not a documented certainty.  If a write is ever rejected with
+        error 0x02, swapping the two mode bytes is the first thing to try.
         """
         if not (DISPLAY_INDEX_MIN <= display_index <= DISPLAY_INDEX_MAX) and (
             display_index != DISPLAY_INDEX_ALL

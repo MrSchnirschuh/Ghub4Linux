@@ -21,6 +21,7 @@ from ghub4linux.core.led import (
     LED_DPI,
     LED_PROFILE,
     MODE_BLINK,
+    MODE_OFF,
     MODE_ON,
     NV_AUTO,
     LedControl,
@@ -30,10 +31,10 @@ from ghub4linux.core.led import (
 class FakeConnection:
     """Answers the 0x1300 frames a G502 Lightspeed actually returns."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Start firmware-owned, with three supported LEDs."""
-        self.sw_control = 0
-        self.states = {LED_BATTERY: 1, LED_DPI: 1, LED_PROFILE: 1}
+        self.sw_control: int = 0
+        self.states: dict[int, int] = {LED_BATTERY: 1, LED_DPI: 1, LED_PROFILE: 1}
         self.calls: list[tuple[int, bytes]] = []
         self.reject_without_software_control = True
 
@@ -62,14 +63,18 @@ class FakeConnection:
         if function == 0x03:  # SetSWControl
             self.sw_control = params[0]
             return bytes(head + [0x00, 0x00])
-        if function == 0x04:  # GetState(i)
+        if function == 0x04:  # GetState(i): mode is a LITTLE-endian u16
             led = params[0]
-            return bytes(head + [led, self.states[led], 0x00])
+            return bytes(head + [led]) + self.states[led].to_bytes(2, "little") + bytes([0x00])
         if function == 0x05:  # SetState
             if self.reject_without_software_control and not self.sw_control:
                 raise RuntimeError("error frame 0x02 (invalid argument)")
             led = params[0]
+            # The transport turns an error frame into b"", which is how the
+            # device reports a rejected argument.
             mode = int.from_bytes(params[1:3], "big")
+            if mode not in (MODE_OFF, MODE_ON):
+                return b""
             self.states[led] = 2 if mode == MODE_ON else 1
             return bytes(head + [0x00, 0x00])
         if function == 0x06:  # GetNVConfig
@@ -238,3 +243,104 @@ class TestNvConfig:
 
     def test_an_unknown_config_is_refused(self, led):
         assert led.set_nv_config(LED_DPI, 0x99) is False
+
+
+class TestTheDeviceReportsInLittleEndian:
+    """The mode field's byte order, pinned from the device's own replies.
+
+    The G502 answers ``00 01 00`` for LED0 and ``01 02 00`` for LED1.  Only the
+    little-endian reading gives a legal mode there (0x0001 Off, 0x0002 On);
+    reading big-endian would give 0x0100/0x0200, which are not modes.  The
+    neighbouring GetInfo capability mask *is* big-endian, so the two fields
+    genuinely differ and each has to be read the way it is sent.
+    """
+
+    @pytest.mark.parametrize(
+        ("reply_modes", "expected"),
+        [((0x01, 0x00), 0x0001), ((0x02, 0x00), 0x0002), ((0x04, 0x00), 0x0004)],
+    )
+    def test_state_field_is_read_little_endian(self, reply_modes, expected):
+        class Connection:
+            def send_feature_request(self, index: int, function: int, params: bytes = b"") -> bytes:
+                """Answer GetState, echoing the requested LED index."""
+                assert function == 0x04
+                return bytes([0x11, 0x01, index, 0x41, params[0], *reply_modes])
+
+        assert LedControl(Connection(), 0x08).get_state(0).mode == expected
+
+    def test_the_index_byte_is_not_read_as_the_mode(self):
+        """``frame[4]`` echoes the index; reading it as the mode is the old bug."""
+
+        class Connection:
+            def send_feature_request(self, index: int, function: int, params: bytes = b"") -> bytes:
+                """Echo the requested index while reporting mode Off."""
+                assert function == 0x04
+                return bytes([0x11, 0x01, index, 0x41, params[0], 0x01, 0x00])
+
+        state = LedControl(Connection(), 0x08).get_state(2)
+        assert state.index == 2
+        assert state.mode == 0x0001
+        assert state.name == "Off"
+
+
+class TestARejectedWriteIsNotSuccess:
+    """An empty reply means the device refused, not that it complied.
+
+    The transport turns an HID++ error frame into ``b""`` — that is how the
+    device rejects an invalid argument — so a check for ``None`` alone let a
+    refused write be reported as applied.
+    """
+
+    def test_an_empty_reply_makes_the_write_fail(self):
+        class Rejecting:
+            """Accepts no write: the device answers an error frame."""
+
+            def __init__(self) -> None:
+                self.sw_control: int = 1
+
+            def send_feature_request(self, index: int, function: int, params: bytes = b"") -> bytes:
+                if function == 0x02:  # GetSWControl
+                    return bytes([0x11, 0x01, index, 0x21, self.sw_control])
+                if function == 0x05:  # SetState - refused
+                    return b""
+                # GetInfo, so that the LED lookup itself succeeds and the write
+                # is the only thing that fails.
+                assert params
+                return bytes([0x11, 0x01, index, 0x11, params[0], 0x02, 0x03, 0x00, 0x03, 0x00])
+
+        assert LedControl(Rejecting(), 0x08).set_state(LED_DPI, MODE_ON, 3) is False
+
+    def test_an_empty_reply_makes_a_read_fail(self):
+        class Silent:
+            """Never answers — the shape a timed-out or rejected read takes."""
+
+            def send_feature_request(self, index: int, function: int, params: bytes = b"") -> bytes:
+                # Any request gets the same nothing; the point is the emptiness.
+                assert index >= 0 and function >= 0 and isinstance(params, bytes)
+                return b""
+
+        control = LedControl(Silent(), 0x08)
+        assert control.get_state(LED_DPI) is None
+        assert control.get_sw_control() is None
+
+    def test_the_device_rejecting_an_unknown_mode_is_reported(self):
+        """The fake answers b"" for a mode outside Off/On, like the hardware."""
+
+        class Connection:
+            """Lets software control through but refuses the actual write."""
+
+            def __init__(self) -> None:
+                self.sw_control: int = 1
+
+            def send_feature_request(self, index: int, function: int, params: bytes = b"") -> bytes:
+                if function == 0x02:  # GetSWControl
+                    return bytes([0x11, 0x01, index, 0x21, self.sw_control])
+                if function == 0x05:  # SetState - refused, like the hardware
+                    return b""
+                # GetInfo: report only Off|On as supported, so the mode under
+                # test is genuinely outside the device's capabilities.
+                assert params
+                return bytes([0x11, 0x01, index, 0x11, params[0], 0x02, 0x03, 0x00, 0x03, 0x00])
+
+        control = LedControl(Connection(), 0x08)
+        assert control.set_state(LED_DPI, MODE_BLINK, 1) is False
