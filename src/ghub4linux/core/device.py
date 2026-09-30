@@ -88,7 +88,6 @@ class DeviceCapability(Enum):
     RGB_LIGHTING = "rgb_lighting"
     MACROS = "macros"
     BATTERY_STATUS = "battery_status"
-    FIRMWARE_UPDATE = "firmware_update"
     ONBOARD_PROFILES = "onboard_profiles"
     REPORT_RATE = "report_rate"
 
@@ -325,6 +324,27 @@ class BaseDevice(ABC):
         if self._info:
             return self._info.firmware_version
         return "Unknown"
+
+    # ── report rate ──────────────────────────────────────────────────────────
+    def get_report_rate_list(self) -> list[int]:
+        """Return the supported report intervals in milliseconds.
+
+        The wire protocol expresses report rate as a *millisecond interval*, not
+        as hertz: 1 ms is 1000 Hz, 8 ms is 125 Hz.  Devices with no report-rate
+        feature offer none.
+        """
+        return []
+
+    def get_report_rate(self) -> int | None:
+        """Return the active report interval in milliseconds."""
+        return None
+
+    def set_report_rate(self, rate: int) -> bool:  # noqa: ARG002
+        """Set the report interval; returns False when the device has none.
+
+        Implementations accept either milliseconds or a hertz value.
+        """
+        return False
 
     def apply_profile(self, profile_index: int) -> bool:
         """Apply a profile."""

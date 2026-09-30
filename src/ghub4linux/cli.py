@@ -179,6 +179,46 @@ def cmd_battery(_manager: DeviceManager, device: BaseDevice, args: argparse.Name
 
 
 @_with_device
+def cmd_report_rate(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
+    """Get or set the polling/report rate of a device."""
+    if not device.has_capability(DeviceCapability.REPORT_RATE):
+        if args.json:
+            print(json.dumps({"supported": [], "current_ms": None}))
+            return
+        print("Report rate not supported for this device.")
+        return
+
+    current = device.get_report_rate()
+    supported = device.get_report_rate_list()
+
+    if args.ms is not None or args.hz is not None:
+        wanted = args.ms if args.ms is not None else args.hz
+        applied = device.set_report_rate(wanted)
+        current = device.get_report_rate()
+        if args.json:
+            print(json.dumps({"applied": applied, "current_ms": current, "supported": supported}))
+            return
+        if not applied:
+            # The device acknowledged the write but kept its old interval, or
+            # refused it outright — either way, do not claim success.
+            print(f"Could not set the report rate to {wanted}. Device reports {current} ms.")
+            return
+        print(f"Report rate set to {current} ms ({1000 // current if current else 0} Hz).")
+        return
+
+    if args.json:
+        print(json.dumps({"current_ms": current, "supported": supported}))
+        return
+    if current is None:
+        print("Could not read the report rate.")
+        return
+    print(f"Current: {current} ms ({1000 // current} Hz)")
+    if supported:
+        hertz = ", ".join(f"{1000 // ms} Hz ({ms} ms)" for ms in supported)
+        print(f"Supported: {hertz}")
+
+
+@_with_device
 def cmd_firmware(_manager: DeviceManager, device: BaseDevice, args: argparse.Namespace) -> None:
     """Check the device's firmware against the LVFS catalog.
 
@@ -551,6 +591,15 @@ CLI_COMMANDS: list[tuple[str, str, list[tuple[str, tuple[str, ...] | None, dict]
     ("list", "List connected devices", []),
     ("info", "Show device info", [("device_id", None, {"help": "Device ID (from list)"})]),
     ("battery", "Show battery status", [("device_id", None, {"help": "Device ID"})]),
+    (
+        "report-rate",
+        "Get or set the polling/report rate",
+        [
+            ("device_id", None, {"help": "Device ID (from list)"}),
+            ("--ms", None, {"type": int, "default": None, "help": "Report interval in ms (1-8)"}),
+            ("--hz", None, {"type": int, "default": None, "help": "Polling rate in Hz (125-1000)"}),
+        ],
+    ),
     (
         "firmware",
         "Check the device's firmware against Logitech's published catalog",

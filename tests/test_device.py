@@ -108,7 +108,6 @@ class TestBaseDevice:
         assert device.has_capability(DeviceCapability.DPI_ADJUSTMENT)
         assert device.has_capability(DeviceCapability.RGB_LIGHTING)
         assert device.has_capability(DeviceCapability.BATTERY_STATUS)
-        assert not device.has_capability(DeviceCapability.FIRMWARE_UPDATE)
 
     def test_battery_status(self, mock_hid_device):
         """Test battery status retrieval."""

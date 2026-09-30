@@ -29,6 +29,7 @@ from ..core.hid import (
     LIGHTSPEED_RECEIVER_PID_3,
     HIDDevice,
 )
+from ..core.hidpp import FEATURE_REPORT_RATE
 
 logger = logging.getLogger(__name__)
 
@@ -393,22 +394,80 @@ class G502Device(BaseDevice):
         }
         return effects.get(effect_type, 0x01)
 
+    # ── report rate (adjustableReportRate 0x8060) ────────────────────────────
+    #
+    # Wire format, verified against the hardware and the specification:
+    #   fn 0 get_report_rate_list ()            -> bitfield, bit N = (N+1) ms
+    #   fn 1 get_report_rate     ()             -> [interval_ms]
+    #   fn 2 set_report_rate     (interval_ms)  -> ()
+    #
+    # The unit is milliseconds, not hertz: the G502 reports 0x8b for its list and
+    # 0x01 as the active interval, i.e. 1 ms = 1000 Hz.  The previous code mapped
+    # invented hertz codes through the wrong function on a hardcoded feature
+    # index, which silently wrote to whatever feature happened to live there.
+
+    def get_report_rate_list(self) -> list[int]:
+        """Return the supported report intervals in milliseconds."""
+        index = self._features.get(FEATURE_REPORT_RATE)
+        if not index:
+            return []
+        frame = self._read_feature(index, 0x00)
+        if len(frame) < 5:
+            return []
+        bitfield = frame[4]
+        return [
+            milliseconds for milliseconds in range(1, 9) if bitfield & (1 << (milliseconds - 1))
+        ]
+
+    def get_report_rate(self) -> int | None:
+        """Return the active report interval in milliseconds."""
+        index = self._features.get(FEATURE_REPORT_RATE)
+        if not index:
+            return None
+        frame = self._read_feature(index, 0x01)
+        if len(frame) < 5 or not frame[4]:
+            return None
+        return frame[4]
+
     def set_report_rate(self, rate: int) -> bool:
-        """Set polling/report rate."""
-        valid_rates = [125, 250, 500, 1000]
-        if rate not in valid_rates:
+        """Set the report interval in milliseconds.
+
+        Accepts milliseconds (1-8) as the protocol defines them.  Hertz values
+        such as 1000 are accepted too, because that is how users and mice are
+        usually described, and converted.
+        """
+        index = self._features.get(FEATURE_REPORT_RATE)
+        if not index or not self._connection:
             return False
 
-        if not self._connection:
-            return True  # Mock success
-
-        try:
-            rate_code = {125: 0x03, 250: 0x02, 500: 0x01, 1000: 0x00}[rate]
-            self._connection.send_feature_request(0x09, 0x00, bytes([rate_code]))
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set report rate: {e}")
+        milliseconds = self._to_milliseconds(rate)
+        if milliseconds is None:
             return False
+        supported = self.get_report_rate_list()
+        if supported and milliseconds not in supported:
+            logger.warning(
+                f"{self.name}: {milliseconds} ms is not supported (device offers {supported})"
+            )
+            return False
+
+        frame = self._read_feature(index, 0x02, bytes([milliseconds]))
+        if not frame:
+            return False
+        # Read back rather than assume the device accepted the value.
+        applied = self.get_report_rate() == milliseconds
+        if not applied:
+            logger.warning(f"{self.name}: report rate {milliseconds} ms not applied")
+        return applied
+
+    @staticmethod
+    def _to_milliseconds(rate: int) -> int | None:
+        """Normalise a rate given either in milliseconds or in hertz."""
+        if rate in (1, 2, 3, 4, 5, 6, 7, 8):
+            return rate
+        if rate in (125, 250, 500, 1000):
+            # 1000 Hz = 1 ms, 500 Hz = 2 ms, 250 Hz = 4 ms, 125 Hz = 8 ms.
+            return 1000 // rate
+        return None
 
 
 class G502Lightspeed(G502Device):

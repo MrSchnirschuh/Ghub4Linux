@@ -17,6 +17,7 @@ from .info_panel import InfoPanel  # noqa: E402
 from .lighting_panel import LightingPanel  # noqa: E402
 from .macro_panel import MacroPanel  # noqa: E402
 from .profile_panel import ProfilePanel  # noqa: E402
+from .report_rate_panel import ReportRatePanel  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +234,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         if device.has_capability(DeviceCapability.RGB_LIGHTING):
             self._add_tab(notebook, "Lighting", LightingPanel(device))
+
+        if device.has_capability(DeviceCapability.REPORT_RATE):
+            self._add_tab(notebook, "Polling Rate", ReportRatePanel(device))
 
         if device.has_capability(DeviceCapability.MACROS):
             self._add_tab(notebook, "Macros", MacroPanel(device))

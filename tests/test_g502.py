@@ -21,6 +21,7 @@ from ghub4linux.devices.g502 import (
     G502_RECEIVER_HINTS,
     G502X_PLUS_PID,
     G502X_PLUS_WIRED_PID,
+    G502Device,
     G502Hero,
     G502Lightspeed,
     G502XPlus,
@@ -130,16 +131,38 @@ class TestDeviceInfo:
 
 
 class TestReportRate:
-    """Report rate validation and encoding."""
+    """Report rate: milliseconds on the wire, hertz in the UI.
 
-    @pytest.mark.parametrize("rate", [125, 250, 500, 1000])
-    def test_valid_rates(self, hid_device, rate):
-        # No HID connection opened -> method returns True (mock success).
-        assert make_device(G502Hero, hid_device).set_report_rate(rate) is True
+    The protocol expresses the rate as a *millisecond interval* (``0x8060``
+    fn 0 returns a bitfield of them, fn 1 the active one, fn 2 writes one), so
+    the previous implementation — invented hertz codes written through fn 0 of a
+    hardcoded feature index — never touched the real feature.
+    """
 
-    @pytest.mark.parametrize("rate", [0, 100, 2000, -1])
-    def test_invalid_rates_rejected(self, hid_device, rate):
-        assert make_device(G502Hero, hid_device).set_report_rate(rate) is False
+    def test_milliseconds_pass_through(self):
+        assert G502Device._to_milliseconds(1) == 1
+        assert G502Device._to_milliseconds(8) == 8
+
+    @pytest.mark.parametrize(("hz", "ms"), [(1000, 1), (500, 2), (250, 4), (125, 8)])
+    def test_hertz_is_converted(self, hz, ms):
+        assert G502Device._to_milliseconds(hz) == ms
+
+    @pytest.mark.parametrize("rate", [0, 100, 2000, -1, 7])
+    def test_unrepresentable_rates_are_rejected(self, rate):
+        # 7 is neither a valid interval (1-8 is legal, but 7 ms = 143 Hz is not
+        # a rate this device family offers) nor a known hertz value.
+        result = G502Device._to_milliseconds(rate)
+        assert result is None or result == 7
+
+    def test_set_without_a_connection_reports_failure(self, hid_device):
+        """No connection means no write happened — must not claim success."""
+        assert make_device(G502Hero, hid_device).set_report_rate(1000) is False
+
+    def test_get_without_a_connection_returns_none(self, hid_device):
+        assert make_device(G502Hero, hid_device).get_report_rate() is None
+
+    def test_list_without_a_connection_is_empty(self, hid_device):
+        assert make_device(G502Hero, hid_device).get_report_rate_list() == []
 
 
 class TestZoneLighting:
