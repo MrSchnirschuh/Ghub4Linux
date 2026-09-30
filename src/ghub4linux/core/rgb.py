@@ -144,6 +144,19 @@ def _u16(high: int, low: int) -> int:
     return (high << 8) | low
 
 
+# Effects whose colour the firmware takes from the host.  Cycling (0x03) is
+# deliberately NOT among them: measured on a POWERPLAY pad, setting it to white
+# and then starting Cycling produces a rainbow — and setting a colour into any
+# of its parameter positions makes no difference either (parameter 0 alone only
+# decides *whether* it animates).  The firmware owns Cycling's colour sequence,
+# so no colour written for it can take effect; a white "Cycle" is impossible on
+# this hardware.  Breathing (0x0A) and Fixed (0x01) do take the colour, verified
+# by reading the animated greyscale ramp back from the device.
+COLOUR_FROM_HOST: frozenset[int] = frozenset(
+    {0x0001, 0x0002, 0x0004, 0x0005, 0x0006, 0x000A, 0x000B}
+)
+
+
 class ColorLedEffect:
     """One entry in a zone's effect table."""
 
@@ -168,6 +181,15 @@ class ColorLedEffect:
     def animated(self) -> bool:
         """True when the effect changes colour on its own."""
         return self.effect_id in ANIMATED_EFFECTS
+
+    @property
+    def takes_colour(self) -> bool:
+        """True when this effect uses a colour the host supplies.
+
+        False for the firmware-driven sequences such as Cycling, where any
+        colour sent is ignored and the device runs its own colour wheel.
+        """
+        return self.effect_id in COLOUR_FROM_HOST
 
     def supports(self, capability_bit: int) -> bool:
         """True when the device advertised *capability_bit* for this effect.

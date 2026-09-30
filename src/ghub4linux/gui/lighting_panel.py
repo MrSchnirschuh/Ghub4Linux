@@ -91,6 +91,22 @@ class LightingPanel(Gtk.Box):
         color_box.append(self.color_button)
         self.append(color_box)
 
+        # Cycling runs a colour sequence of its own in the firmware: a colour
+        # sent for it is ignored, so offering a colour picker would promise
+        # something the hardware cannot do.  The swatch is replaced by a note
+        # and the picker comes back when an effect that does use a colour is
+        # chosen.
+        self.color_note = Gtk.Label(
+            label=(
+                "This effect animates through its own colour sequence, so the "
+                "colour above does not apply to it."
+            )
+        )
+        self.color_note.add_css_class("dim-label")
+        self.color_note.set_halign(Gtk.Align.START)
+        self.color_note.set_wrap(True)
+        self.append(self.color_note)
+
         # Brightness slider
         brightness_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         brightness_label = Gtk.Label(label="Brightness")
@@ -156,6 +172,9 @@ class LightingPanel(Gtk.Box):
         """Show the period the current speed produces for the chosen effect."""
         if not hasattr(self, "period_label"):
             return
+        # Keep the colour controls in step here too, since this runs both when
+        # the effect changes and when the widget is first built.
+        self._update_colour_visibility()
         speed = int(self.speed_scale.get_value())
         effect_id = self._selected_effect_id()
         if effect_id is None:
@@ -165,8 +184,35 @@ class LightingPanel(Gtk.Box):
         self.period_label.set_text(f"{period} ms per cycle")
 
     def _on_speed_changed(self, *_args: object) -> None:
-        """Keep the period readout in step with the slider."""
+        """Keep the period readout and the colour controls in step."""
         self._update_period_label()
+        self._update_colour_visibility()
+
+    def _selected_effect_takes_colour(self) -> bool:
+        """Whether the chosen effect uses a colour the host supplies.
+
+        Unknown or unreadable effects default to True, so a device whose
+        metadata cannot be read still gets the colour picker rather than
+        silently losing the control.
+        """
+        index = self.effect_combo.get_active()
+        if not (0 <= index < len(self.effect_names)):
+            return True
+        name = self.effect_names[index]
+        rgb = getattr(self.device, "_rgb", None)
+        if rgb is None:
+            return True
+        for zone in rgb.zones:
+            for entry in zone.effects:
+                if entry.config_name == name:
+                    return bool(entry.takes_colour)
+        return True
+
+    def _update_colour_visibility(self) -> None:
+        """Hide the colour picker for effects that ignore the colour."""
+        takes = self._selected_effect_takes_colour()
+        self.color_button.set_visible(takes)
+        self.color_note.set_visible(not takes)
 
     def _supported_effects(self) -> list[str]:
         """Effects the device itself reports, falling back to a sane minimum.

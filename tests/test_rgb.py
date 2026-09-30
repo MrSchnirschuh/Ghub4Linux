@@ -19,6 +19,7 @@ import pytest
 
 from ghub4linux.core.rgb import (
     ANIMATED_EFFECTS,
+    COLOUR_FROM_HOST,
     EFFECT_IDS_BY_NAME,
     EFFECT_NAME_BY_ID,
     EFFECT_NAMES,
@@ -308,3 +309,36 @@ def _stubborn(connection: FakeLedConnection, keep_lit: tuple[int, int, int] | No
         return FakeLedConnection.send_feature_request(connection, index, function, params)
 
     return call
+
+
+class TestWhichEffectsTakeAColour:
+    """Cycling ignores the colour, so the UI must not offer one for it.
+
+    Measured on a POWERPLAY pad: setting the zone to white and then starting
+    Cycling produces a rainbow, and writing a colour into any of Cycling's
+    parameter positions changes nothing — parameter 0 alone decides *whether* the
+    effect animates.  Breathing and Fixed do take the colour (verified by reading
+    the animated greyscale ramp back).  Offering a colour picker for Cycling
+    would promise something the hardware cannot do.
+    """
+
+    def test_cycling_does_not_take_a_colour(self):
+        assert ColorLedEffect(2, 0x0003, 0xC005, 1000).takes_colour is False
+
+    def test_fixed_takes_a_colour(self):
+        assert ColorLedEffect(1, 0x0001, 0x0000, 0).takes_colour is True
+
+    def test_breathing_takes_a_colour(self):
+        assert ColorLedEffect(3, 0x000A, 0xC105, 60).takes_colour is True
+
+    def test_wave_and_ripple_take_a_colour(self):
+        assert ColorLedEffect(0, 0x0004, 0, 0).takes_colour is True
+        assert ColorLedEffect(0, 0x000B, 0, 0).takes_colour is True
+
+    def test_disabled_needs_no_colour(self):
+        """Nothing is shown, so the picker is meaningless."""
+        assert ColorLedEffect(0, 0x0000, 0, 0).takes_colour is False
+
+    def test_the_cycling_variants_with_saturation_also_do_not(self):
+        """0x15 is the same firmware sequence with extra parameters."""
+        assert 0x0015 not in COLOUR_FROM_HOST
