@@ -16,6 +16,26 @@ from .hid import HIDConnection, HIDDevice, HIDError, HIDManager
 
 logger = logging.getLogger(__name__)
 
+# Coarse unifiedBattery level enum (1=critical, 2=low, 4=good, 8=full) mapped
+# to a representative percentage.
+_LEVEL_ENUM_TO_PERCENT: dict[int, int] = {1: 5, 2: 20, 4: 60, 8: 100}
+
+# Lithium-polymer discharge curve: 4200 mV is full, 3500 mV is empty.
+_MV_FULL = 4200
+_MV_EMPTY = 3500
+
+
+def _percent_from_millivolts(millivolts: int) -> int:
+    """Estimate a charge percentage from a single-cell Li-Po voltage.
+
+    ``0x1001 batteryVoltage`` reports only a voltage, but the GUI wants a
+    percentage, so the usual linear approximation between empty and full is
+    used and clamped to 0..100.
+    """
+    span = _MV_FULL - _MV_EMPTY
+    percent = round((millivolts - _MV_EMPTY) / span * 100)
+    return max(0, min(100, percent))
+
 
 class DeviceType(Enum):
     """Type of Logitech device."""
@@ -143,12 +163,16 @@ class BaseDevice(ABC):
             self._connection = None
 
     def discover_features(self) -> dict[int, int]:
-        """Discover HID++ 2.0 feature indexes by querying the device via IRoot (0x0000).
+        """Discover HID++ 2.0 feature indexes for this device.
 
-        Sends a ``getFeature`` request (function 0, index 0x00) for each known
-        feature ID and records the returned feature index.  Returns a mapping
-        of ``feature_id -> feature_index`` for every feature that the device
-        reports as supported (non-zero index).
+        Resolves every entry of
+        :data:`~ghub4linux.core.hid.DISCOVERABLE_FEATURES` through IRoot
+        (feature 0x0000, function 0) and returns ``feature_id -> feature_index``
+        for the features the device actually reports.
+
+        Indexes must never be assumed: on a G502 Lightspeed, AdjustableDPI sits
+        at ``0x0c`` and battery data comes from BatteryVoltage at ``0x06``,
+        whereas the code used to look for BatteryStatus at ``0x07``.
         """
         from .hid import DISCOVERABLE_FEATURES
 
@@ -157,16 +181,98 @@ class BaseDevice(ABC):
             return feature_map
 
         for feature_id in DISCOVERABLE_FEATURES:
-            try:
-                params = bytes([(feature_id >> 8) & 0xFF, feature_id & 0xFF])
-                response = self._connection.send_feature_request(0x00, 0x00, params)
-                # Byte 4 of the response contains the feature index (0 = not supported)
-                if response and len(response) >= 5 and response[4] != 0:
-                    feature_map[feature_id] = response[4]
-            except HIDError as e:
-                logger.debug(f"Feature discovery failed for {feature_id:#06x}: {e}")
+            index = self._connection.feature_index(feature_id)
+            if index:
+                feature_map[feature_id] = index
 
+        logger.debug(f"{self.name}: discovered features {feature_map}")
         return feature_map
+
+    # ── feature helpers ──────────────────────────────────────────────────────
+    def _read_feature(self, index: int, function: int = 0x00, params: bytes = b"") -> bytes:
+        """Read a feature, returning ``b""`` when the device refuses.
+
+        One retry is attempted: a wireless mouse shares the air and the
+        receiver's HID++ queue with its input traffic, so a single lost frame is
+        normal and must not be reported as "unsupported" to the user.
+        """
+        if not self._connection or not index:
+            return b""
+        for attempt in range(2):
+            try:
+                response = self._connection.send_feature_request(index, function, params)
+            except HIDError as exc:
+                logger.debug(
+                    f"{self.name}: feature 0x{index:02x} fn 0x{function:02x} failed: {exc}"
+                )
+                response = b""
+            if response:
+                return response
+            if attempt == 0:
+                logger.debug(
+                    f"{self.name}: feature 0x{index:02x} fn 0x{function:02x} empty, retrying"
+                )
+        return b""
+
+    def _battery_from_features(self, features: dict[int, int]) -> BatteryStatus | None:
+        """Read the battery using whichever HID++ battery feature exists.
+
+        Logitech ships three variants and a device carries exactly one:
+
+        * ``0x1004`` UnifiedBattery — fn 0 returns the charge percentage,
+          fn 1 a coarse level/charging enum.
+        * ``0x1000`` BatteryStatus — fn 0 returns ``[discharge_level,
+          next_level, status]`` where *status* is an enum (0 = discharging,
+          1..4 = charging), **not** a bitmask.
+        * ``0x1001`` BatteryVoltage — fn 0 returns ``[voltage_hi, voltage_lo,
+          flags]`` as a big-endian millivolt reading plus charging flags.  This
+          is the only battery source on G-series wireless mice such as the
+          G502 Lightspeed; it reports no percentage, so one is estimated from
+          the voltage.
+        """
+        from .hidpp import (
+            FEATURE_BATTERY_STATUS,
+            FEATURE_BATTERY_VOLTAGE,
+            FEATURE_UNIFIED_BATTERY,
+        )
+
+        unified = features.get(FEATURE_UNIFIED_BATTERY)
+        if unified:
+            frame = self._read_feature(unified)
+            if len(frame) >= 6 and frame[4] <= 100:
+                return BatteryStatus(level=frame[4], charging=bool(frame[5] & 0x0F))
+            level = self._read_feature(unified, 0x01)
+            if len(level) >= 6:
+                return BatteryStatus(
+                    level=_LEVEL_ENUM_TO_PERCENT.get(level[5], 0),
+                    charging=bool(level[6] & 0x0F) if len(level) > 6 else False,
+                )
+
+        legacy = features.get(FEATURE_BATTERY_STATUS)
+        if legacy:
+            frame = self._read_feature(legacy)
+            if len(frame) >= 7 and frame[4] <= 100:
+                # enum: 0 discharging, 1 recharging, 2 almost full, 3 full,
+                # 4 slow recharge, 5/6 invalid/thermal error, 7 other
+                return BatteryStatus(level=frame[4], charging=1 <= frame[6] <= 4)
+
+        voltage_feature = features.get(FEATURE_BATTERY_VOLTAGE)
+        if voltage_feature:
+            frame = self._read_feature(voltage_feature)
+            if len(frame) >= 7:
+                millivolts = (frame[4] << 8) | frame[5]
+                flags = frame[6]
+                if 2000 <= millivolts <= 5000:
+                    external_power = bool(flags & 0x80)
+                    charging = external_power and (flags & 0x03) != 0x02
+                    return BatteryStatus(
+                        level=_percent_from_millivolts(millivolts),
+                        charging=charging,
+                        voltage=millivolts / 1000.0,
+                    )
+
+        logger.debug(f"{self.name}: no usable battery feature in {features}")
+        return None
 
     @abstractmethod
     def _init_device(self) -> None:

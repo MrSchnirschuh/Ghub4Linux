@@ -9,9 +9,11 @@ import logging
 
 from ..core.config import (
     DeviceConfig,
+    DPILevel,
     DPISettings,
     LightingEffect,
     LightingSettings,
+    RGBColor,
 )
 from ..core.device import (
     BaseDevice,
@@ -31,6 +33,11 @@ from ..core.hid import (
 logger = logging.getLogger(__name__)
 
 
+def _bcd(value: int) -> int:
+    """Decode a packed-BCD byte (0x12 -> 12), used by DeviceInfo versions."""
+    return (value >> 4) * 10 + (value & 0x0F)
+
+
 # G502 Product IDs
 G502_HERO_PID = 0xC092  # G502 Hero wired
 G502_LIGHTSPEED_PID = 0x407F  # G502 Lightspeed wireless
@@ -45,6 +52,7 @@ class G502Device(BaseDevice):
 
     # Device specifications
     MAX_DPI = 25600
+    DPI_MIN = 100
     DPI_STEP = 50
     BUTTON_COUNT = 11
     DEFAULT_DPI_LEVELS = [400, 800, 1600, 3200, 6400]
@@ -67,21 +75,104 @@ class G502Device(BaseDevice):
         self._dpi_feature_index: int | None = None
         self._battery_feature_index: int | None = None
         self._rgb_feature_index: int | None = None
+        self._features: dict[int, int] = {}
 
     def _init_device(self) -> None:
         """Initialize device after connection."""
         self._query_features()
+        self._apply_capabilities()
         self._info = self.get_device_info()
-        logger.info(f"Initialized {self._info.name}")
+        self._sync_dpi_levels()
+        logger.info(
+            f"Initialized {self._info.name} "
+            f"(features: {', '.join(f'0x{k:04x}' for k in sorted(self._features)) or 'none'})"
+        )
+
+    def _sync_dpi_levels(self) -> None:
+        """Seed the profile's DPI levels from what the sensor actually runs.
+
+        The profile starts with the class defaults (400…6400), which have
+        nothing to do with the real device: a mouse left at 25600 DPI would be
+        shown as "800 DPI active".  The current sensor resolution is read back
+        and the active level is set to the matching entry, so the GUI and the
+        CLI agree with the hardware.
+        """
+        if not self.has_capability(DeviceCapability.DPI_ADJUSTMENT):
+            return
+        current = self.get_sensor_dpi(0)
+        if not current:
+            return
+
+        settings = self.active_profile.dpi_settings
+        levels = list(settings.levels)
+        for index, level in enumerate(levels):
+            if level.dpi == current:
+                settings.active_level = index
+                return
+
+        # Not one of the presets: keep the list but append the real value so it
+        # is selectable and the active entry tells the truth.
+        levels.append(DPILevel(dpi=current, color=RGBColor(255, 0, 255)))
+        settings.levels = levels
+        settings.active_level = len(levels) - 1
+
+    def _apply_capabilities(self) -> None:
+        """Declare only the capabilities the device actually reported.
+
+        Claiming a capability the hardware lacks makes the GUI render controls
+        that write to unrelated features, so every entry is conditional.
+        """
+        from ..core.hidpp import (
+            FEATURE_ADJUSTABLE_DPI,
+            FEATURE_BATTERY_STATUS,
+            FEATURE_BATTERY_VOLTAGE,
+            FEATURE_ONBOARD_PROFILES,
+            FEATURE_REPORT_RATE,
+            FEATURE_RGB_EFFECTS,
+            FEATURE_UNIFIED_BATTERY,
+        )
+
+        caps: set[DeviceCapability] = {DeviceCapability.MACROS}
+        if FEATURE_ADJUSTABLE_DPI in self._features:
+            caps.add(DeviceCapability.DPI_ADJUSTMENT)
+        if any(
+            f in self._features
+            for f in (FEATURE_UNIFIED_BATTERY, FEATURE_BATTERY_STATUS, FEATURE_BATTERY_VOLTAGE)
+        ):
+            caps.add(DeviceCapability.BATTERY_STATUS)
+        if FEATURE_ONBOARD_PROFILES in self._features:
+            caps.add(DeviceCapability.ONBOARD_PROFILES)
+        if FEATURE_REPORT_RATE in self._features:
+            caps.add(DeviceCapability.REPORT_RATE)
+        if FEATURE_RGB_EFFECTS in self._features:
+            caps.add(DeviceCapability.RGB_LIGHTING)
+        self._capabilities = caps
 
     def _query_features(self) -> None:
-        """Query HID++ feature indexes via IRoot (0x0000) feature discovery."""
-        from ..core.hid import FEATURE_ADJUSTABLE_DPI, FEATURE_BATTERY_STATUS, FEATURE_RGB_EFFECTS
+        """Query HID++ feature indexes via IRoot (0x0000) feature discovery.
 
-        feature_map = self.discover_features()
-        self._dpi_feature_index = feature_map.get(FEATURE_ADJUSTABLE_DPI, 0x06)
-        self._battery_feature_index = feature_map.get(FEATURE_BATTERY_STATUS, 0x07)
-        self._rgb_feature_index = feature_map.get(FEATURE_RGB_EFFECTS, 0x08)
+        Indexes are only taken from the device's own answer.  Hardcoded
+        fallbacks are deliberately absent: the previous defaults (DPI 0x06,
+        battery 0x07, RGB 0x08) address unrelated features on a real G502 and
+        made writes silently corrupt unrelated settings.
+        """
+        from ..core.hidpp import (
+            FEATURE_ADJUSTABLE_DPI,
+            FEATURE_RGB_EFFECTS,
+        )
+
+        self._features = self.discover_features()
+        self._dpi_feature_index = self._features.get(FEATURE_ADJUSTABLE_DPI)
+        # Battery comes from whichever variant the device carries; the actual
+        # read happens in BaseDevice._battery_from_features.
+        self._battery_feature_index = (
+            self._features.get(0x1004) or self._features.get(0x1000) or self._features.get(0x1001)
+        )
+        # Only the RGBEffects feature takes an effect payload.  A device with a
+        # single logo LED exposes LEDControl (0x1300) instead, which is driven
+        # through the onboard profile and is not covered here yet — claiming it
+        # here would write effect bytes into a feature that does not expect them.
+        self._rgb_feature_index = self._features.get(FEATURE_RGB_EFFECTS)
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
@@ -121,21 +212,40 @@ class G502Device(BaseDevice):
         )
 
     def _get_firmware_version(self) -> str:
-        """Get firmware version from device."""
-        if not self._connection:
+        """Get the main firmware version from DeviceInfo (0x0003).
+
+        ``getFwInfo`` (fn 1) returns, in the 4 response bytes after the 3
+        payload bytes: entity type, a 3-char firmware prefix, a packed-BCD
+        firmware number, a packed-BCD revision and a packed-BCD build.
+        """
+        if not self._connection or not self._features:
             return "Unknown"
 
-        try:
-            # Send firmware version request
-            # This is a simplified implementation
-            response = self._connection.send_feature_request(0x00, 0x01)
-            if response and len(response) >= 6:
-                major = response[4]
-                minor = response[5]
-                return f"{major}.{minor}"
-        except Exception as e:
-            logger.debug(f"Could not get firmware version: {e}")
+        info_index = self._features.get(0x0003)
+        if not info_index:
+            return "Unknown"
 
+        frame = self._read_feature(info_index, 0x00)
+        if len(frame) < 5:
+            return "Unknown"
+        entity_count = min(frame[4], 8)
+
+        for entity in range(entity_count):
+            detail = self._read_feature(info_index, 0x01, bytes([entity]))
+            if len(detail) < 11:
+                continue
+            entity_type = detail[4]
+            # Only the main application firmware is meaningful to a user;
+            # bootloader and hardware entities report a different numbering.
+            if entity_type != 0:
+                continue
+            number = _bcd(detail[8])
+            revision = _bcd(detail[9])
+            build = _bcd(detail[10]) * 100 + _bcd(detail[11]) if len(detail) > 11 else 0
+            version = f"{number}.{revision:02d}"
+            if build:
+                version += f" (build {build})"
+            return version
         return "Unknown"
 
     def _get_connection_type(self) -> ConnectionType:
@@ -147,48 +257,86 @@ class G502Device(BaseDevice):
 
     def _get_battery_status(self) -> BatteryStatus | None:
         """Get battery status from device."""
-        if not self._connection or self._battery_feature_index is None:
-            return None
-
-        try:
-            response = self._connection.send_feature_request(self._battery_feature_index, 0x00)
-            if response and len(response) >= 6:
-                level = response[4]
-                status = response[5]
-                charging = (status & 0x80) != 0
-                return BatteryStatus(level=level, charging=charging)
-        except Exception as e:
-            logger.debug(f"Could not get battery status: {e}")
-
-        return BatteryStatus(level=0, charging=False)
+        return self._battery_from_features(self._features)
 
     def _set_dpi_settings(self, settings: DPISettings) -> bool:
-        """Set DPI settings on device."""
+        """Set DPI settings on the device.
+
+        Per HID++ 2.0 ``adjustableDpi`` (0x2201) the per-sensor call is
+
+        * function 2 ``getSensorDpi(sensor)``
+        * function 3 ``setSensorDpi(sensor, dpi)`` with the value as a
+          **big-endian** ``u16``.
+
+        Logitech stores *one* active sensor resolution, not a table of DPI
+        levels, so the active level of the profile is what gets written.
+        """
         if not self._connection or self._dpi_feature_index is None:
-            # Update local config only
+            # Nothing to talk to — keep the change in the local profile only.
             self.active_profile.dpi_settings = settings
-            return True
-
-        try:
-            # Set each DPI level
-            for i, level in enumerate(settings.levels):
-                dpi_value = level.dpi
-                # Convert DPI to device format (usually divided by step)
-                dpi_encoded = dpi_value // self.DPI_STEP
-
-                params = bytes([i, (dpi_encoded >> 8) & 0xFF, dpi_encoded & 0xFF])
-                self._connection.send_feature_request(self._dpi_feature_index, 0x03, params)
-
-            # Set active level
-            self._connection.send_feature_request(
-                self._dpi_feature_index, 0x04, bytes([settings.active_level])
-            )
-
-            self.active_profile.dpi_settings = settings
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set DPI: {e}")
             return False
+
+        if not settings.levels:
+            return False
+        index = max(0, min(settings.active_level, len(settings.levels) - 1))
+        dpi = max(self.DPI_MIN, min(settings.levels[index].dpi, self.MAX_DPI))
+
+        frame = self._read_feature(
+            self._dpi_feature_index, 0x03, bytes([0x00, (dpi >> 8) & 0xFF, dpi & 0xFF])
+        )
+        if not frame:
+            logger.error(f"{self.name}: device rejected DPI {dpi}")
+            return False
+
+        self.active_profile.dpi_settings = settings
+        logger.info(f"{self.name}: DPI set to {dpi} (level {index + 1})")
+        return True
+
+    def get_sensor_dpi(self, sensor: int = 0) -> int | None:
+        """Read the sensor's current resolution in DPI."""
+        if not self._dpi_feature_index:
+            return None
+        frame = self._read_feature(self._dpi_feature_index, 0x02, bytes([sensor, 0x00, 0x00]))
+        if len(frame) < 7:
+            return None
+        return (frame[5] << 8) | frame[6]
+
+    def get_supported_dpi(self, sensor: int = 0) -> list[int]:
+        """Return the DPI values the sensor accepts.
+
+        The device describes them as explicit values plus range markers; a
+        marker's low 13 bits are the step size and it follows the range start,
+        with the next explicit value acting as the range end.
+        """
+        if not self._dpi_feature_index:
+            return []
+        frame = self._read_feature(self._dpi_feature_index, 0x01, bytes([sensor, 0x00, 0x00]))
+        if len(frame) < 5:
+            return []
+
+        # 0x2201 payload[0] echoes the sensor index, then u16 BE entries; a
+        # range marker (value >> 13 == 0b111) carries the step in its low bits
+        # and is followed by the range end value.
+        values: list[int] = []
+        pending_step: int | None = None
+        payload = bytes(frame[4:])
+        for offset in range(1, len(payload) - 1, 2):
+            raw = (payload[offset] << 8) | payload[offset + 1]
+            if raw == 0:
+                break
+            if raw >> 13 == 0b111:
+                pending_step = raw & 0x1FFF
+                continue
+            if pending_step and values:
+                start = values[-1]
+                if pending_step > 0 and raw > start:
+                    values.extend(range(start + pending_step, raw + 1, pending_step))
+                else:
+                    values.append(raw)
+                pending_step = None
+            else:
+                values.append(raw)
+        return sorted(set(values))
 
     def _set_lighting_settings(self, settings: LightingSettings) -> bool:
         """Set lighting settings on device."""

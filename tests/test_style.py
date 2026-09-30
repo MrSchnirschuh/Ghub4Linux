@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 import ghub4linux.style as style_module
-from ghub4linux.style import style, bold, dim
+from ghub4linux.style import bold, dim, style
 
 
 def test_style_disabled_without_color():

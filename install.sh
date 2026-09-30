@@ -64,18 +64,30 @@ else
     # User install: create a dedicated venv under ~/.local/share/ghub4linux/.
     # --system-site-packages lets the venv use system GTK/GObject bindings.
     mkdir -p "$(dirname "$VENV_DIR")"
-    python3 -m venv --system-site-packages "$VENV_DIR"
-    "$VENV_DIR/bin/pip" install "$SCRIPT_DIR"
+    if [ ! -x "$VENV_DIR/bin/python3" ]; then
+        python3 -m venv --system-site-packages "$VENV_DIR"
+    else
+        # Re-install over an existing venv: recreating it would abort on
+        # ensurepip, which fails once the base interpreter has no matching
+        # ensurepip bundle left.  Reusing it and reinstalling the package is
+        # what "install again" is supposed to mean.
+        echo "    Reusing existing virtual environment at $VENV_DIR"
+    fi
+    "$VENV_DIR/bin/python3" -m pip install --quiet --upgrade pip 2>/dev/null || true
+    "$VENV_DIR/bin/python3" -m pip install "$SCRIPT_DIR"
     INSTALLED_BIN="$VENV_DIR/bin/ghub4linux"
 fi
 
-# ── 2. Expose the launcher on PATH ────────────────────────────────────────────
-# Skip this when the user ran the script from inside their own venv (the venv's
-# bin/ is already on PATH while the venv is active).
+# ── 2. Expose the launchers on PATH ───────────────────────────────────────────
+# Both entry points are linked: the GUI and the headless CLI, which the README
+# documents as equally available commands.
 if [ -z "${VIRTUAL_ENV:-}" ]; then
-    echo "==> Installing launcher to $BIN_DIR …"
+    echo "==> Installing launchers to $BIN_DIR …"
     $INSTALL_CMD mkdir -p "$BIN_DIR"
     $INSTALL_CMD ln -sf "$INSTALLED_BIN" "$BIN_DIR/ghub4linux"
+    if [ -x "${INSTALLED_BIN%/*}/ghub4linux-cli" ]; then
+        $INSTALL_CMD ln -sf "${INSTALLED_BIN%/*}/ghub4linux-cli" "$BIN_DIR/ghub4linux-cli"
+    fi
 fi
 
 # ── 3. Install desktop entry ───────────────────────────────────────────────────
