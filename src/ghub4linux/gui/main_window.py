@@ -72,9 +72,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _load_stylesheet() -> None:
         """Apply the bundled stylesheet, if it can be found.
 
-        The file is installed alongside the package for user installs and lives
-        in data/ in the source tree, so both are probed.  A missing stylesheet
-        must not stop the app from starting.
+        The file ships inside the package (``ghub4linux/data/style.css``) so a
+        real ``pip install`` carries it; the source-tree location is probed as
+        well for editable installs.  A missing stylesheet must not keep the app
+        from starting — it only means the default GTK theme is used.
         """
         candidates = [
             Path(__file__).resolve().parent.parent / "data" / "style.css",

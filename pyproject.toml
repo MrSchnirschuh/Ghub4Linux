@@ -52,6 +52,12 @@ Issues = "https://github.com/MrSchnirschuh/Ghub4Linux/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The stylesheet is part of the UI, so it has to travel with the package:
+# without this, a real `pip install` would drop it and the app would silently
+# fall back to the default GTK theme.
+ghub4linux = ["data/*.css"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
