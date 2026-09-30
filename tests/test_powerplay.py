@@ -84,17 +84,38 @@ class FakeConnection:
             if function == 0x00:  # get_info
                 payload = bytes([0x01, 0x00, 0x03, 0x00, 0x04])
             elif function == 0x01:  # get_zone_info
-                payload = bytes([0x00, 0x00, 0x02, 0x04])
+                # Real pad frame: `00 | 00 02 | 04 | 00` — zone 0, location a
+                # BE u16 (0x0002 = Logo), effectsNumber 4, persistency 0.
+                # Serving the location's low byte where the count belongs is
+                # what once made this pad look like it had only two effects.
+                payload = bytes([0x00, 0x00, 0x02, 0x04, 0x00])
             elif function == 0x02:  # get_zone_effect_info
                 effect_index = params[1]
-                # Big-endian effect IDs: eff0=Disabled, eff1=FixedColor.
-                effect_id = {0: 0x0000, 1: 0x0001}.get(effect_index, 0xFFFF)
+                # The pad's four effects, with real capabilities and periods.
+                table = {
+                    0: (0x0000, 0x0000, 0),
+                    1: (0x0001, 0x0000, 0),
+                    2: (0x0003, 0xC005, 1000),
+                    3: (0x000A, 0xC105, 60),
+                }
+                effect_id, caps, period = table.get(effect_index, (0xFFFF, 0, 0))
                 payload = bytes(
-                    [0x00, effect_index, effect_id >> 8, effect_id & 0xFF, 0xC0, 0x05, 0x00, 0x00]
+                    [
+                        0x00,
+                        effect_index,
+                        effect_id >> 8,
+                        effect_id & 0xFF,
+                        caps >> 8,
+                        caps & 0xFF,
+                        period >> 8,
+                        period & 0xFF,
+                    ]
                 )
             elif function == 0x03:  # set_zone_effect
                 self.color = (params[2], params[3], params[4])
                 payload = bytes([0x00, params[1]])
+            elif function == 0x08:  # set_sw_control
+                payload = bytes([0x01, params[0]])
             elif function == 0x0C:  # get_current_color
                 payload = bytes([0x00, *self.color])
 
@@ -268,6 +289,6 @@ class TestFeatureHandling:
         which is a large part of why no effect other than static did anything.
         """
         assert EFFECT_NAMES[0x0000] == "Disabled"
-        assert EFFECT_NAMES[0x0001] == "FixedColor"
-        assert EFFECT_NAMES[0x0004] == "ColorWave"
+        assert EFFECT_NAMES[0x0001] == "Fixed"
+        assert EFFECT_NAMES[0x0004] == "Color Wave"
         assert EFFECT_NAMES[0x000B] == "Ripple"

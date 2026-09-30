@@ -13,8 +13,12 @@ from ghub4linux.core.device import (
     DeviceType,
 )
 from ghub4linux.core.hid import HIDDevice
+from ghub4linux.core.rgb import (
+    EFFECT_IDS_BY_NAME,
+    EFFECT_NAME_BY_ID,
+    EFFECT_NAMES,
+)
 from ghub4linux.devices.g502 import (
-    _EFFECT_BY_NAME,
     G502_DEVICES,
     G502_HERO_PID,
     G502_LIGHTSPEED_PID,
@@ -51,37 +55,45 @@ def make_device(cls, hid, **config_kwargs):
 
 
 class TestEffectCodes:
-    """Effect types map onto the documented colorLedEffects (0x8070) IDs.
+    """Config effect names map onto the engine's documented 0x8070 effect IDs.
 
     The old implementation carried its own invented code table and pushed it
-    through functions that do not take an effect at all, which is why nothing
-    but static appeared to work.  These are the engine's real IDs.
+    through functions that do not take an effect at all.  These are the real IDs,
+    and a name may legitimately have more than one implementation: breathing
+    exists both as the waveform variant (10) and the legacy one (2), so the
+    device is asked which it has rather than one being assumed.
     """
 
     @pytest.mark.parametrize(
         ("effect_type", "effect_id"),
         [
-            ("off", 0x0000),
-            ("static", 0x0001),
-            ("breathing", 0x0002),
-            ("cycle", 0x0003),
-            ("wave", 0x0004),
-            ("starlight", 0x0005),
-            ("press", 0x0006),
-            ("ripple", 0x000B),
+            ("off", 0),
+            ("static", 1),
+            ("cycle", 3),
+            ("wave", 4),
+            ("starlight", 5),
+            ("press", 6),
+            ("ripple", 11),
         ],
     )
     def test_known_effects(self, effect_type, effect_id):
-        assert _EFFECT_BY_NAME[effect_type] == effect_id
+        assert EFFECT_IDS_BY_NAME[effect_type] == (effect_id,)
+
+    def test_breathing_prefers_the_waveform_variant(self):
+        """The waveform effect can set period/waveform; legacy only has speed."""
+        assert EFFECT_IDS_BY_NAME["breathing"][0] == 10
+        assert 2 in EFFECT_IDS_BY_NAME["breathing"]
 
     def test_unknown_effect_is_not_mapped(self):
         """An unknown name must not silently become some effect ID."""
-        assert "rainbow" not in _EFFECT_BY_NAME
+        assert "rainbow" not in EFFECT_IDS_BY_NAME
 
-    def test_ids_are_distinct(self):
-        """Two names pointing at one ID would make one of them unreachable."""
-        values = list(_EFFECT_BY_NAME.values())
-        assert len(values) == len(set(values))
+    def test_every_id_has_a_name(self):
+        """Otherwise the UI would show a raw number for a real effect."""
+        for ids in EFFECT_IDS_BY_NAME.values():
+            for effect_id in ids:
+                assert effect_id in EFFECT_NAMES
+                assert effect_id in EFFECT_NAME_BY_ID
 
     def test_g502_has_no_lighting_without_a_connection(self, hid_device):
         """Without 0x8070 resolved there is nothing to write to."""

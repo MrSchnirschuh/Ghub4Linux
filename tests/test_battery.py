@@ -41,15 +41,28 @@ class TestChargeStatusEnum:
 
 
 class TestVoltageFlags:
-    """0x1001 flags byte: bit 7 external power, bits 0-1 status, bits 3/4 rate."""
+    """0x1001 flags byte per the kernel and the LKML Table 1.
 
-    def test_bit7_clear_means_discharging(self):
-        # The G502 reports exactly this while on the PowerPlay pad.
-        assert _voltage_charge_state(0x00) is False
+    bit 7 external power (gates everything), bits 0-2 charge status, bit 3 fast
+    charge, bit 4 slow charge, bit 5 critical.
+    """
 
-    def test_external_power_with_no_detail_is_unknown(self):
-        """Bit 7 set but no rate/complete bit: the byte cannot say."""
-        assert _voltage_charge_state(0x80) is None
+    def test_all_zero_is_unknown_not_a_discharge_claim(self):
+        """The G502's exact value, while it demonstrably charges on the pad.
+
+        The wire format reads 0x00 as "no external power", but the mouse's own
+        charging LED says otherwise, and PowerPlay holds the battery at 85-95%
+        by design so the pad legitimately stops charging. The byte cannot be
+        reconciled with the hardware, so it must not become a claim either way.
+        """
+        assert _voltage_charge_state(0x00) is None
+
+    def test_status_bits_without_external_power_still_report(self):
+        """A byte with real status bits is not the ambiguous all-zero case."""
+        assert _voltage_charge_state(0x07) is False
+
+    def test_external_power_with_status_zero_is_charging(self):
+        assert _voltage_charge_state(0x80) is True
 
     def test_fast_charging(self):
         assert _voltage_charge_state(0x88) is True
@@ -57,29 +70,73 @@ class TestVoltageFlags:
     def test_slow_charging(self):
         assert _voltage_charge_state(0x90) is True
 
-    def test_full_takes_precedence_over_rate_bits(self):
+    def test_end_of_charge_is_not_charging(self):
+        """Status 1 = charge complete, which is not the same as charging."""
         assert _voltage_charge_state(0x81) is False
-        assert _voltage_charge_state(0x83) is False
 
-    def test_charge_fault_is_not_charging(self):
+    def test_charge_stopped_is_not_charging(self):
+        """Status 2 = charging stopped."""
         assert _voltage_charge_state(0x82) is False
 
+    def test_charge_restarting_is_charging(self):
+        assert _voltage_charge_state(0x83) is True
+
+    def test_hardware_error_is_not_a_claim(self):
+        """Status 7 means the battery reported a fault, not a state."""
+        assert _voltage_charge_state(0x87) is None
+
     def test_critical_bit_does_not_change_the_state(self):
-        assert _voltage_charge_state(0xA0) is None
+        """Bit 5 flags a low charge level, not the charging state."""
+        assert _voltage_charge_state(0xA0) is True
 
 
 class TestVoltageEstimate:
-    def test_endpoints(self):
-        assert _percent_from_millivolts(4200) == 100
-        assert _percent_from_millivolts(3500) == 0
+    """The curve must match the public reference, not a straight ramp.
 
-    def test_clamped(self):
+    A linear 4200..3500 ramp is materially wrong across the whole useful range:
+    at 4044 mV it says 78% where the kernel's table and Solaar's both say 87%.
+    """
+
+    @pytest.mark.parametrize(
+        ("millivolts", "percent"),
+        [
+            (4186, 100),
+            (4067, 90),
+            (3989, 80),
+            (3922, 70),
+            (3859, 60),
+            (3811, 50),
+            (3778, 40),
+            (3751, 30),
+            (3717, 20),
+            (3671, 10),
+            (3646, 5),
+            (3579, 2),
+            (3500, 0),
+        ],
+    )
+    def test_reference_points(self, millivolts, percent):
+        """Every published point must be reproduced exactly."""
+        assert _percent_from_millivolts(millivolts) == percent
+
+    def test_interpolates_between_points(self):
+        """3945 mV is a real Solaar G502 readout, and lands at 73%."""
+        assert _percent_from_millivolts(3945) == 73
+
+    def test_measured_g502_value(self):
+        """The G502's 4044 mV is ~87%, not the 78% a linear ramp would claim.
+
+        That is consistent with PowerPlay holding the battery between 85% and
+        95% by design.
+        """
+        assert _percent_from_millivolts(4044) == 87
+
+    def test_clamped_outside_the_curve(self):
         assert _percent_from_millivolts(5000) == 100
         assert _percent_from_millivolts(1000) == 0
 
-    def test_measured_g502_value(self):
-        """The G502 reported 4044 mV — roughly 78%, and an estimate."""
-        assert _percent_from_millivolts(4044) == 78
+    def test_never_goes_negative(self):
+        assert _percent_from_millivolts(2000) == 0
 
 
 class TestDescribe:

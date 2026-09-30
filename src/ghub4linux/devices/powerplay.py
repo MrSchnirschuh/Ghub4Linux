@@ -49,17 +49,6 @@ POWERPLAY_PID = 0x405F
 # is picked up if the pad reports it.
 POWERPLAY_2_PID = 0x40C6
 
-_EFFECT_BY_NAME = {
-    "off": 0x0000,
-    "static": 0x0001,
-    "breathing": 0x0002,
-    "cycle": 0x0003,
-    "wave": 0x0004,
-    "starlight": 0x0005,
-    "press": 0x0006,
-    "ripple": 0x000B,
-}
-
 
 class Powerplay(BaseDevice):
     """Logitech POWERPLAY wireless charging system (mouse pad)."""
@@ -98,22 +87,14 @@ class Powerplay(BaseDevice):
     def supported_lighting_effects(self) -> list[str]:
         """Effect names this pad actually offers.
 
-        The UI builds its list from this instead of a hardcoded catalogue, so it
-        cannot offer an effect the hardware will silently refuse.
+        Enumerated from the device: the pad has four effects (Disabled, Fixed,
+        Cycling and waveform Pulsing/Breathing). An earlier build read its zone
+        info one byte early, saw a count of two, and could therefore only ever
+        offer "static" and "off".
         """
         if not self._rgb:
             return []
-        by_id = {value: name for name, value in _EFFECT_BY_NAME.items()}
-        names: list[str] = []
-        for effect_id in self._rgb.supported_effect_ids():
-            name = by_id.get(effect_id)
-            if name is None:
-                continue
-            if name == "off":
-                # "Off" is the enable switch, not a choice in the effect list.
-                continue
-            names.append(name)
-        return names
+        return [name for name in self._rgb.supported_effect_names() if name != "off"]
 
     def lighting_zones(self) -> list[str]:
         """Human-readable names of the pad's LED zones."""
@@ -173,12 +154,11 @@ class Powerplay(BaseDevice):
             applied = self._rgb.set_off(0)
         else:
             effect = settings.effect
-            effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
-            applied = self._rgb.set_effect(
+            applied = self._rgb.set_effect_by_name(
                 0,
-                effect_id,
+                effect.effect_type,
                 (effect.color.red, effect.color.green, effect.color.blue),
-                effect.brightness,
+                duration_ms=effect.speed,
             )
 
         if not applied:
@@ -200,12 +180,11 @@ class Powerplay(BaseDevice):
             return False
         if effect.effect_type == "off":
             return self._rgb.set_off(target.index)
-        effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
-        return self._rgb.set_effect(
+        return self._rgb.set_effect_by_name(
             target.index,
-            effect_id,
+            effect.effect_type,
             (effect.color.red, effect.color.green, effect.color.blue),
-            effect.brightness,
+            duration_ms=effect.speed,
         )
 
     # ── info helpers ─────────────────────────────────────────────────────────

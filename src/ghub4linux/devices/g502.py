@@ -34,19 +34,6 @@ from ..core.rgb import ColorLedEffects
 
 logger = logging.getLogger(__name__)
 
-# EffectId values of the colorLedEffects (0x8070) engine that the UI knows how to
-# offer, mapped to the effect_type strings used in the configuration model.
-_EFFECT_BY_NAME = {
-    "off": 0x0000,
-    "static": 0x0001,
-    "breathing": 0x0002,
-    "cycle": 0x0003,
-    "wave": 0x0004,
-    "starlight": 0x0005,
-    "press": 0x0006,
-    "ripple": 0x000B,
-}
-
 
 def _bcd(value: int) -> int:
     """Decode a packed-BCD byte (0x12 -> 12), used by DeviceInfo versions."""
@@ -378,16 +365,10 @@ class G502Device(BaseDevice):
     # nothing.
 
     def supported_lighting_effects(self) -> list[str]:
-        """Effect names this mouse actually offers."""
+        """Effect names this mouse actually offers, read from its own engine."""
         if not self._rgb:
             return []
-        by_id = {value: name for name, value in _EFFECT_BY_NAME.items()}
-        names: list[str] = []
-        for effect_id in self._rgb.supported_effect_ids():
-            name = by_id.get(effect_id)
-            if name and name != "off":
-                names.append(name)
-        return names
+        return [name for name in self._rgb.supported_effect_names() if name != "off"]
 
     def lighting_zones(self) -> list[str]:
         """Human-readable names of this mouse's LED zones."""
@@ -423,9 +404,10 @@ class G502Device(BaseDevice):
             if not settings.enabled:
                 results.append(self._rgb.set_off(zone_index))
             else:
-                effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
                 results.append(
-                    self._rgb.set_effect(zone_index, effect_id, color, effect.brightness)
+                    self._rgb.set_effect_by_name(
+                        zone_index, effect.effect_type, color, duration_ms=effect.speed
+                    )
                 )
 
         if not any(results):

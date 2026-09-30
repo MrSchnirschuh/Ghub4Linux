@@ -16,9 +16,29 @@ from .hid import HIDConnection, HIDDevice, HIDError, HIDManager
 
 logger = logging.getLogger(__name__)
 
-# Lithium-polymer discharge curve: 4200 mV is full, 3500 mV is empty.
-_MV_FULL = 4200
-_MV_EMPTY = 3500
+# Lithium-polymer discharge curve used to *estimate* a percentage from the
+# voltage-only 0x1001 feature.  The kernel's 100-point table
+# (hidpp20_map_battery_capacity) is used because a straight 4200..3500 ramp is
+# materially wrong: for the 4044 mV a G502 Lightspeed reports, the linear
+# approximation says 78% while the real curve (and Solaar's 13-point table,
+# which agrees with it) says 87%.  Logitech's own per-device table is not
+# public, so this is the best available public approximation and is always
+# labelled as an estimate.
+_VOLTAGE_CURVE: tuple[tuple[int, int], ...] = (
+    (4186, 100),
+    (4067, 90),
+    (3989, 80),
+    (3922, 70),
+    (3859, 60),
+    (3811, 50),
+    (3778, 40),
+    (3751, 30),
+    (3717, 20),
+    (3671, 10),
+    (3646, 5),
+    (3579, 2),
+    (3500, 0),
+)
 
 
 # Coarse battery level enum reported by the 0x1004 unifiedBattery feature
@@ -56,46 +76,63 @@ def _charge_state_from_status(status: int) -> bool | None:
 def _percent_from_millivolts(millivolts: int) -> int:
     """Estimate a charge percentage from a single-cell Li-Po voltage.
 
-    ``0x1001 batteryVoltage`` reports only a voltage, but the GUI wants a
-    percentage, so the usual linear approximation between empty and full is
-    used and clamped to 0..100.
+    ``0x1001 batteryVoltage`` reports only a voltage, so any percentage derived
+    from it is an estimate and must be presented as one.  The curve is
+    interpolated between the public reference points rather than assumed linear.
 
-    This is an estimate and is documented as one: the device never sends a real
-    percentage, so a consumer must not present the result as a measurement.
+    Outside the curve's range the result is clamped, and a value far below the
+    range is reported as 0 rather than extrapolated into a negative charge.
     """
-    span = _MV_FULL - _MV_EMPTY
-    percent = round((millivolts - _MV_EMPTY) / span * 100)
-    return max(0, min(100, percent))
+    points = _VOLTAGE_CURVE
+    if millivolts >= points[0][0]:
+        return 100
+    if millivolts <= points[-1][0]:
+        return 0
+    for (high_mv, high_pct), (low_mv, low_pct) in zip(points, points[1:], strict=True):
+        if low_mv <= millivolts <= high_mv:
+            span = high_mv - low_mv
+            ratio = (millivolts - low_mv) / span
+            return round(low_pct + ratio * (high_pct - low_pct))
+    return 0
 
 
 def _voltage_charge_state(flags: int) -> bool | None:
-    """Decode the 0x1001 charging-flags byte.
+    """Decode the 0x1001 charging-flags byte, per the kernel and LKML spec.
 
-    Verified against OpenLogi's spec for ``x1001 batteryVoltage``:
+    ``Table 1`` of the LKML patch "HID: logitech-hidpp: only read chargeStatus
+    if extPower is active":
 
-    * bit 7 — external power present.  When clear the device runs on battery and
-      every other bit is meaningless.
-    * bits 0-1 — charge status; ``0b01``/``0b11`` means full and ``0b10`` means
-      on external power but not charging (a charge fault).  Takes precedence
-      over the rate bits.
-    * bit 3 — fast charging, bit 4 — slow charging.
+    * bit 7 — external power active.  **Bit 7 gates every other bit**: the
+      charge status is only valid while it is set.
+    * bits 0-2 — charge status, read only when bit 7 is set: 0 charging,
+      1 end of charge, 2 charge stopped, 7 hardware error.
+    * bit 3 — fast charge, bit 4 — slow charge.
+    * bit 5 — charge level critical.
 
-    Returns ``None`` when the byte contradicts itself rather than guessing: on
-    the G502 Lightspeed this byte reads ``0x00`` even while the device sits on a
-    PowerPlay pad and is demonstrably charging, so the honest answer there is
-    "cannot tell from this value".
+    The G502 Lightspeed reports ``0x00`` here, which the wire format reads as
+    "no external power, therefore discharging" — while the mouse sits on a
+    PowerPlay pad with its charging LED lit.  Logitech's documented PowerPlay
+    behaviour explains the contradiction rather than resolving it: on the pad
+    the battery is deliberately held between 85% and 95%, so the pad
+    legitimately stops and resumes charging and the firmware does not always
+    surface the pad as external power.
+
+    Since this value cannot be reconciled with the observable hardware, it is
+    reported as unknown rather than as a discharge claim the device contradicts.
     """
     if not flags & 0x80:
-        return False
+        # No external power reported.  Treat as discharging only when the byte
+        # carries no other claim; all-zero is the ambiguous case above.
+        return False if flags else CHARGING_UNKNOWN
 
-    status_bits = flags & 0x03
-    if status_bits in (0x01, 0x03):
-        return False  # on external power, charge complete
-    if status_bits == 0x02:
-        return False  # on external power, not charging (fault)
-    if flags & 0x08 or flags & 0x10:
-        return True  # fast / slow charging
-    # External power is set but no rate and no completion status is reported.
+    status_bits = flags & 0x07
+    if status_bits == 0x00 or flags & 0x08 or flags & 0x10:
+        return True  # charging, or a fast/slow charge rate reported
+    if status_bits in (0x01, 0x02):
+        return False  # end of charge, or charging stopped
+    if status_bits == 0x03:
+        return True  # charge restarting
+    # 7 = hardware error and 4..6 are reserved: neither justifies a yes/no.
     return CHARGING_UNKNOWN
 
 
