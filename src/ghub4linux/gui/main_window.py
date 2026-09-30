@@ -1,6 +1,7 @@
 """Main application window for ghub4linux."""
 
 import logging
+import threading
 from pathlib import Path
 
 import gi
@@ -60,6 +61,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_title("ghub4linux")
         self.set_default_size(1060, 720)
 
+        # Guards against overlapping scans: a second press while the first
+        # enumeration is still running must not start another one.
+        self._scanning = False
+
         self._load_stylesheet()
 
         # Create main layout
@@ -113,11 +118,11 @@ class MainWindow(Adw.ApplicationWindow):
         devices_label.set_halign(Gtk.Align.START)
         sidebar_header.append(devices_label)
 
-        refresh_btn = Gtk.Button.new_from_icon_name("view-refresh-symbolic")
-        refresh_btn.add_css_class("flat")
-        refresh_btn.set_tooltip_text("Scan for devices again")
-        refresh_btn.connect("clicked", lambda _: self._scan_devices())
-        sidebar_header.append(refresh_btn)
+        self.refresh_btn = Gtk.Button.new_from_icon_name("view-refresh-symbolic")
+        self.refresh_btn.add_css_class("flat")
+        self.refresh_btn.set_tooltip_text("Scan for devices again")
+        self.refresh_btn.connect("clicked", lambda _: self._scan_devices())
+        sidebar_header.append(self.refresh_btn)
         sidebar.append(sidebar_header)
 
         self.device_list = Gtk.ListBox()
@@ -298,13 +303,71 @@ class MainWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(toast)
 
     def _scan_devices(self) -> bool:
-        """Scan for connected devices and refresh the sidebar."""
+        """Kick off a device scan without blocking the main loop.
+
+        Enumerating the USB tree and probing every HID++ endpoint takes 4-5
+        seconds here.  Running that on the main loop froze the window for the
+        whole time, which is why the refresh button appeared to crash the
+        program: the window was unresponsive, so a second click landed while the
+        first scan still held the loop, and by then the compositor considered
+        the client unresponsive and dropped it ("Lost connection to Wayland
+        compositor").
+
+        The scan runs on a worker thread; only the widget updates happen back on
+        the main loop.  A plain thread plus ``GLib.idle_add`` is used rather than
+        ``Gio.Task`` because a task's return value cannot be delivered in this
+        PyGObject build at all: every ``task.return_value = ...`` leaves the task
+        unset and ``propagate_value()`` raises ``TypeError: Invalid type``, so
+        the result never arrives.
+        """
+        if self._scanning:
+            # A scan is already running; one press is enough. Clicking again
+            # must not queue a second full enumeration.
+            logger.debug("Scan already in progress; ignoring the request")
+            return False
+
+        self._scanning = True
+        self._set_refresh_busy(True)
+
         # Remember the selection: a refresh must not throw the user back to the
         # empty state when the device is still there.
-        selected_id = None
         selected_row = self.device_list.get_selected_row()
-        if isinstance(selected_row, DeviceRow):
-            selected_id = selected_row.device.device_id
+        selected_id = selected_row.device.device_id if isinstance(selected_row, DeviceRow) else None
+
+        def work() -> None:
+            """Runs on a worker thread and hands the result to the main loop."""
+            try:
+                devices = self.device_manager.scan_devices()
+            except Exception as exc:  # noqa: BLE001 - surfaced in the UI below
+                logger.error(f"Device scan failed: {exc}")
+                devices = []
+            GLib.idle_add(self._finish_scan, devices, selected_id)
+
+        threading.Thread(target=work, name="device-scan", daemon=True).start()
+        return False
+
+    def _finish_scan(self, devices: list[BaseDevice], selected_id: str | None) -> bool:
+        """Apply a finished scan result on the main loop."""
+        self._scanning = False
+        self._set_refresh_busy(False)
+        self._populate_devices(devices, selected_id)
+        return False
+
+    def _set_refresh_busy(self, busy: bool) -> None:
+        """Show that a scan is running without locking the window up."""
+        button = getattr(self, "refresh_btn", None)
+        if button is not None:
+            button.set_sensitive(not busy)
+        if busy:
+            self.home_status.set_text("Scanning for devices…")
+
+    def _populate_devices(self, devices: list[BaseDevice], selected_id: str | None) -> None:
+        """Rebuild the sidebar and home page from a finished scan result."""
+        logger.info(f"Device scan found {len(devices)} device(s)")
+        for device in devices:
+            logger.info(
+                f"  {device.name}: {'connected' if device.is_connected else 'not connected'}"
+            )
 
         while True:
             row = self.device_list.get_row_at_index(0)
@@ -313,13 +376,7 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 break
 
-        devices = self.device_manager.scan_devices()
-        logger.info(f"Device scan found {len(devices)} device(s)")
-
         for device in devices:
-            logger.info(
-                f"  {device.name}: {'connected' if device.is_connected else 'not connected'}"
-            )
             self.device_list.append(DeviceRow(device))
 
         self._refresh_home(devices)
@@ -336,8 +393,6 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 # The selected device is gone; do not keep a stale panel open.
                 self._show_home()
-
-        return False
 
     def _refresh_home(self, devices: list[BaseDevice]) -> None:
         """Rebuild the home page tiles."""

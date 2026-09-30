@@ -1,13 +1,14 @@
 """Device information panel."""
 
 import logging
+import threading
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Gio, Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..core.device import BaseDevice  # noqa: E402
 from ..core.firmware import FirmwareCatalog, FirmwareCheck, check_firmware  # noqa: E402
@@ -140,33 +141,39 @@ class InfoPanel(Gtk.Box):
 
         The check runs off the main loop: reading the LVFS catalog means
         decompressing ~20 MB, which would visibly stall the window.
+
+        A plain worker thread plus ``GLib.idle_add`` carries the result back, not
+        ``Gio.Task``: in this PyGObject build assigning to ``task.return_value``
+        never sets the task up, so ``propagate_value()`` raises ``TypeError:
+        Invalid type`` and the callback only ever saw a failure — the button
+        reported "Could not read the firmware catalog." no matter what the
+        catalog actually contained.
         """
         logger.info("Checking for firmware updates")
         self.update_btn.set_sensitive(False)
         self.update_btn.set_label("Checking…")
         self._show_result("Reading the firmware catalog…")
 
-        def work(*_args: object) -> None:
-            """Runs in the worker thread; the result travels via the Task."""
-            task = _args[0]
-            assert isinstance(task, Gio.Task)
-            task.return_value(check_firmware(self.device, FirmwareCatalog()))
-
-        def done(_source: object, task: Gio.Task) -> None:
+        def work() -> None:
+            """Runs on a worker thread and hands the result to the main loop."""
             try:
-                check = task.propagate_value().value
-            except Exception as exc:  # noqa: BLE001
+                check: FirmwareCheck | None = check_firmware(self.device, FirmwareCatalog())
+            except Exception as exc:  # noqa: BLE001 - shown to the user below
                 logger.warning(f"Firmware check failed: {exc}")
-                self._show_result("Could not read the firmware catalog.")
-            else:
-                assert isinstance(check, FirmwareCheck)
-                self._show_result(check.message)
-            finally:
-                self.update_btn.set_sensitive(True)
-                self.update_btn.set_label("Check for Updates")
+                check = None
+            GLib.idle_add(self._finish_check, check)
 
-        task = Gio.Task.new(None, None, done)
-        task.run_in_thread(work)
+        threading.Thread(target=work, name="firmware-check", daemon=True).start()
+
+    def _finish_check(self, check: FirmwareCheck | None) -> bool:
+        """Show the outcome of a finished firmware check."""
+        if check is None:
+            self._show_result("Could not read the firmware catalog.")
+        else:
+            self._show_result(check.message)
+        self.update_btn.set_sensitive(True)
+        self.update_btn.set_label("Check for Updates")
+        return False
 
     def _show_result(self, message: str) -> None:
         """Show the outcome inside the panel (and as a toast when possible)."""
