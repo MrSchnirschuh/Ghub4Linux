@@ -407,24 +407,57 @@ class G502Device(BaseDevice):
         return [zone.location_name for zone in self._rgb.zones]
 
     def get_lighting_settings(self) -> LightingSettings:
-        """Read the current colour back from the device."""
+        """Read the current colour of every zone back from the device.
+
+        Each zone is read separately, because they hold different colours: the
+        bars and the logo are addressable independently, so reading only zone 0
+        would show one zone's colour for both and make the panel claim the
+        second zone looks like the first.
+        """
         settings = super().get_lighting_settings()
-        if self._rgb:
-            color = self._rgb.get_current_color(0)
-            if color is not None:
-                settings.effect.color.red = color[0]
-                settings.effect.color.green = color[1]
-                settings.effect.color.blue = color[2]
-                settings.enabled = any(color)
+        if not self._rgb:
+            return settings
+
+        for zone in self._rgb.zones:
+            color = self._rgb.get_current_color(zone.index)
+            if color is None:
+                continue
+            effect = LightingEffect(
+                effect_type=settings.effect.effect_type,
+                color=RGBColor(red=color[0], green=color[1], blue=color[2]),
+                speed=settings.effect.speed,
+                brightness=settings.effect.brightness,
+            )
+            if zone.index == 0:
+                settings.effect = effect
+                # A device with no lit zone at all reports black everywhere.
+                settings.enabled = self._lights_are_on(zone.index) if color == (0, 0, 0) else True
+            settings.zones[zone.location_name] = effect
         return settings
 
-    def _set_lighting_settings(self, settings: LightingSettings) -> bool:
-        """Apply lighting settings to the mouse."""
+    def _lights_are_on(self, zone_index: int) -> bool:
+        """Whether a zone is genuinely lit rather than merely reading black.
+
+        The black readback is ambiguous — it means both "switched off" and
+        "showing a colour that happens to be black" — so the stored effect is
+        consulted instead of inferring from the colour alone.
+        """
         if not self._rgb:
             return False
+        return self._rgb.get_stored_effect(zone_index) not in (None, 0x0000)
 
-        effect = settings.effect
-        color = (effect.color.red, effect.color.green, effect.color.blue)
+    def _set_lighting_settings(self, settings: LightingSettings) -> bool:
+        """Apply lighting settings to the mouse.
+
+        Each zone takes its own entry from ``settings.zones`` when it has one,
+        so the bars and the logo can carry different colours; a zone without an
+        entry follows ``settings.effect``.  This mouse genuinely has separately
+        addressable zones — setting Primary to green and Logo to blue and
+        reading both back returns exactly those colours, in either order — which
+        is what makes a two-colour battery gauge possible at all.
+        """
+        if not self._rgb:
+            return False
 
         # Apply to every zone the device reported: writing only to zone 0 would
         # change one LED and leave the others as they were.
@@ -433,17 +466,20 @@ class G502Device(BaseDevice):
         for zone_index in zone_indexes:
             if not settings.enabled:
                 results.append(self._rgb.set_off(zone_index))
-            else:
-                results.append(
-                    self._rgb.set_effect_by_name(
-                        zone_index,
-                        effect.effect_type,
-                        color,
-                        # The model stores a speed (higher = faster); the
-                        # wire wants a period in milliseconds.
-                        speed=effect.speed,
-                    )
+                continue
+            zone = self._rgb.zone(zone_index)
+            effect = settings.effect_for(zone.location_name if zone else "")
+            color = (effect.color.red, effect.color.green, effect.color.blue)
+            results.append(
+                self._rgb.set_effect_by_name(
+                    zone_index,
+                    effect.effect_type,
+                    color,
+                    # The model stores a speed (higher = faster); the
+                    # wire wants a period in milliseconds.
+                    speed=effect.speed,
                 )
+            )
 
         if not any(results):
             logger.warning(f"{self.name}: lighting change not applied by the device")

@@ -6,6 +6,7 @@ from ghub4linux.core.config import (
     DeviceConfig,
     LightingEffect,
     LightingSettings,
+    RGBColor,
 )
 from ghub4linux.core.device import (
     ConnectionType,
@@ -314,3 +315,162 @@ class TestDpiLevelSync:
         before = [level.dpi for level in device.active_profile.dpi_settings.levels]
         device._sync_dpi_levels()
         assert [level.dpi for level in device.active_profile.dpi_settings.levels] == before
+
+
+class TestSeparateZoneColours:
+    """The bars and the logo can carry different colours.
+
+    This is what the battery gauge needs: the bars' *count* comes from the
+    status-LED feature, which carries no colour at all, so the colour has to
+    come from the RGB engine — and for the bars and the logo to differ at all,
+    the two zones must be addressable separately.
+
+    Measured on a G502 Lightspeed: setting Primary to (0,255,0) and Logo to
+    (0,0,255) and reading both back returns exactly those, and swapping them
+    returns the swapped values — so they are genuinely independent rather than
+    one colour written twice.
+    """
+
+    class FakeRgb:
+        """Records what each zone was told, keyed by zone index."""
+
+        def __init__(self) -> None:
+            self.zones = [_Zone(0, "Primary"), _Zone(1, "Logo")]
+            self.applied: dict[int, tuple[str, tuple[int, int, int]]] = {}
+
+        def zone(self, index: int):
+            """The zone object for *index*, like the real engine."""
+            return next((z for z in self.zones if z.index == index), None)
+
+        def set_effect_by_name(self, index, name, colour, speed=None):
+            """Remember the name and colour for one zone."""
+            del speed
+            self.applied[index] = (name, tuple(colour))
+            return True
+
+        def set_off(self, index):
+            """Remember that a zone was switched off."""
+            self.applied[index] = ("off", (0, 0, 0))
+            return True
+
+    def _device(self, hid_device):
+        dev = make_device(G502Lightspeed, hid_device)
+        dev._rgb = self.FakeRgb()
+        return dev
+
+    def test_a_zone_takes_its_own_colour(self, hid_device):
+        dev = self._device(hid_device)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect(color=RGBColor(255, 255, 255)),
+            zones={
+                "Primary": LightingEffect(color=RGBColor(0, 255, 0)),
+                "Logo": LightingEffect(color=RGBColor(0, 0, 255)),
+            },
+        )
+        assert dev.set_lighting_settings(settings) is True
+        assert dev._rgb.applied[0][1] == (0, 255, 0)
+        assert dev._rgb.applied[1][1] == (0, 0, 255)
+
+    def test_a_zone_without_an_entry_follows_the_shared_effect(self, hid_device):
+        """Only the bars were given a colour, so the logo keeps the default."""
+        dev = self._device(hid_device)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect(color=RGBColor(255, 255, 255)),
+            zones={"Primary": LightingEffect(color=RGBColor(255, 0, 0))},
+        )
+        assert dev.set_lighting_settings(settings) is True
+        assert dev._rgb.applied[0][1] == (255, 0, 0)
+        assert dev._rgb.applied[1][1] == (255, 255, 255)
+
+    def test_a_zone_can_carry_a_different_effect_than_another(self, hid_device):
+        dev = self._device(hid_device)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect(effect_type="static", color=RGBColor(255, 255, 255)),
+            zones={
+                "Logo": LightingEffect(effect_type="breathing", color=RGBColor(0, 0, 255), speed=40)
+            },
+        )
+        assert dev.set_lighting_settings(settings) is True
+        assert dev._rgb.applied[0][0] == "static"
+        assert dev._rgb.applied[1][0] == "breathing"
+
+    def test_each_zone_still_gets_its_own_write(self, hid_device):
+        """Two zones means two writes — one colour written twice is the old bug."""
+        dev = self._device(hid_device)
+        settings = LightingSettings(enabled=True, effect=LightingEffect())
+        assert dev.set_lighting_settings(settings) is True
+        assert set(dev._rgb.applied) == {0, 1}
+
+
+class _Zone:
+    """Minimal stand-in for a ColorLedZone: an index and a name."""
+
+    def __init__(self, index: int, location_name: str) -> None:
+        self.index = index
+        self.location_name = location_name
+
+
+class TestReadingZoneColoursBack:
+    """Each zone's colour is read separately.
+
+    Reading only zone 0 and showing it for both would make the panel state
+    something false about the second zone — and the two zones really can hold
+    different colours, so the false statement would be visible.
+    """
+
+    class FakeRgb:
+        """Answers a different colour per zone, plus a stored effect."""
+
+        def __init__(self, colours, stored=0x0001) -> None:
+            self.zones = [_Zone(0, "Primary"), _Zone(1, "Logo")]
+            self._colours = colours
+            self._stored = stored
+
+        def get_current_color(self, index: int):
+            """The colour this zone was primed with."""
+            return self._colours.get(index)
+
+        def get_stored_effect(self, index: int):
+            """The effect this zone is showing."""
+            del index
+            return self._stored
+
+        def zone(self, index: int):
+            return next((z for z in self.zones if z.index == index), None)
+
+    def _device(self, hid_device, colours, stored=0x0001):
+        dev = make_device(G502Lightspeed, hid_device)
+        dev._rgb = self.FakeRgb(colours, stored)
+        return dev
+
+    def test_both_zones_are_read(self, hid_device):
+        dev = self._device(hid_device, {0: (0, 255, 0), 1: (0, 0, 255)})
+        settings = dev.get_lighting_settings()
+        assert settings.zones["Primary"].color.green == 255
+        assert settings.zones["Logo"].color.blue == 255
+        assert settings.zones["Primary"].color.blue == 0
+        assert settings.zones["Logo"].color.green == 0
+
+    def test_a_single_zone_device_reports_only_that_zone(self, hid_device):
+        dev = self._device(hid_device, {0: (255, 0, 0), 1: None})
+        settings = dev.get_lighting_settings()
+        assert settings.effect.color.red == 255
+        assert "Logo" not in settings.zones or settings.zones["Logo"].color.red == 255
+
+    def test_black_alone_does_not_mean_switched_off(self, hid_device):
+        """A black readback is ambiguous, so the stored effect decides."""
+        dev = self._device(hid_device, {0: (0, 0, 0), 1: (0, 0, 0)}, stored=0x0001)
+        assert dev.get_lighting_settings().enabled is True
+
+    def test_a_disabled_zone_does_read_as_switched_off(self, hid_device):
+        dev = self._device(hid_device, {0: (0, 0, 0), 1: (0, 0, 0)}, stored=0x0000)
+        assert dev.get_lighting_settings().enabled is False
+
+    def test_an_unreadable_zone_is_not_invented(self, hid_device):
+        """An unanswered read must not produce a colour the device never sent."""
+        dev = self._device(hid_device, {0: None, 1: None})
+        settings = dev.get_lighting_settings()
+        assert settings.zones == {}

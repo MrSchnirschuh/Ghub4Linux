@@ -98,7 +98,19 @@ class LightingSettings:
 
     enabled: bool = True
     effect: LightingEffect = field(default_factory=LightingEffect)
+    # Per-zone overrides, keyed by the zone's human name ("Primary", "Logo").
+    #
+    # A device whose LEDs are separately addressable lets one zone carry a
+    # different effect than another - which is what makes a battery gauge on the
+    # bars and a separate colour for the logo possible, since the device itself
+    # cannot colour them independently (colour lives on the RGB zone, and the
+    # bars' count comes from the status-LED feature).  An absent key means the
+    # zone follows `effect`.
     zones: dict[str, LightingEffect] = field(default_factory=dict)
+
+    def effect_for(self, zone_name: str) -> LightingEffect:
+        """The effect to apply to *zone_name*, falling back to the shared one."""
+        return self.zones.get(zone_name, self.effect)
 
 
 @dataclass

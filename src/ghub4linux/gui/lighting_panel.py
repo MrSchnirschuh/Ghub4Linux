@@ -17,7 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 class LightingPanel(Gtk.Box):
-    """Panel for lighting/RGB settings."""
+    """Panel for lighting/RGB settings.
+
+    A device that reports more than one independently addressable zone gets one
+    row per zone, each with its own colour, so that the zones can actually be
+    given different colours.  Writing one colour to every zone — which is what
+    this panel used to do — makes the bars and the logo identical, and on the
+    status LEDs that is not a cosmetic detail: the *colour* of the DPI/battery
+    bars comes from the same RGB engine, so a two-colour battery gauge is only
+    possible if the zones are written separately.
+    """
 
     def __init__(self, device: BaseDevice):
         """Initialize lighting panel."""
@@ -107,6 +116,40 @@ class LightingPanel(Gtk.Box):
         self.color_note.set_wrap(True)
         self.append(self.color_note)
 
+        # Per-zone colours.
+        #
+        # Only shown when the device really has more than one addressable zone,
+        # because a single-zone device gets nothing from a second picker.
+        self.zone_buttons: dict[str, Gtk.ColorButton] = {}
+        zones = self._zone_names()
+        if len(zones) > 1:
+            heading = Gtk.Label(label="Colour per zone")
+            heading.set_halign(Gtk.Align.START)
+            self.append(heading)
+
+            for name in zones:
+                zone_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                zone_box.append(Gtk.Label(label=name))
+                zone_rgba = self._rgba_for(settings, name)
+                button = Gtk.ColorButton.new_with_rgba(zone_rgba)
+                button.set_hexpand(True)
+                button.set_halign(Gtk.Align.END)
+                zone_box.append(button)
+                self.append(zone_box)
+                self.zone_buttons[name] = button
+
+            zone_note = Gtk.Label(
+                label=(
+                    "These zones are separately addressable, so each can carry its "
+                    "own colour — which is how the DPI/battery bars and the logo "
+                    "can differ. The colour above applies to any zone not listed."
+                )
+            )
+            zone_note.add_css_class("dim-label")
+            zone_note.set_halign(Gtk.Align.START)
+            zone_note.set_wrap(True)
+            self.append(zone_note)
+
         # Brightness slider
         brightness_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         brightness_label = Gtk.Label(label="Brightness")
@@ -149,6 +192,28 @@ class LightingPanel(Gtk.Box):
         apply_btn.set_margin_top(24)
         apply_btn.connect("clicked", self._on_apply)
         self.append(apply_btn)
+
+    def _zone_names(self) -> list[str]:
+        """Names of the device's RGB zones, empty when it has no engine."""
+        rgb = getattr(self.device, "_rgb", None)
+        if rgb is None:
+            return []
+        try:
+            return [zone.location_name for zone in rgb.zones]
+        except Exception as exc:  # noqa: BLE001 - a dead link must not break the panel
+            logger.warning(f"could not read lighting zones: {exc}")
+            return []
+
+    @staticmethod
+    def _rgba_for(settings: LightingSettings, zone_name: str) -> Gdk.RGBA:
+        """The colour to show for a zone, read back from the device."""
+        effect = settings.effect_for(zone_name)
+        rgba = Gdk.RGBA()
+        rgba.red = effect.color.red / 255.0
+        rgba.green = effect.color.green / 255.0
+        rgba.blue = effect.color.blue / 255.0
+        rgba.alpha = 1.0
+        return rgba
 
     def _selected_effect_id(self) -> int | None:
         """Effect ID of the currently selected effect, if it is known."""
@@ -252,7 +317,24 @@ class LightingPanel(Gtk.Box):
             brightness=int(self.brightness_scale.get_value()),
         )
 
-        settings = LightingSettings(enabled=self.enable_switch.get_active(), effect=effect)
+        # One entry per zone the panel showed, so each keeps its own colour.
+        zones: dict[str, LightingEffect] = {}
+        for name, button in self.zone_buttons.items():
+            zone_rgba = button.get_rgba()
+            zones[name] = LightingEffect(
+                effect_type=effect_type,
+                color=RGBColor(
+                    red=int(zone_rgba.red * 255),
+                    green=int(zone_rgba.green * 255),
+                    blue=int(zone_rgba.blue * 255),
+                ),
+                speed=effect.speed,
+                brightness=effect.brightness,
+            )
+
+        settings = LightingSettings(
+            enabled=self.enable_switch.get_active(), effect=effect, zones=zones
+        )
 
         root = self.get_root()
         if self.device.set_lighting_settings(settings):
