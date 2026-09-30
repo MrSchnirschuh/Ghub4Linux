@@ -458,7 +458,7 @@ class G502XPlus(G502Device):
 
 
 # Device registry mapping
-G502_DEVICES = {
+G502_DEVICES: dict[int, type[BaseDevice]] = {
     G502_HERO_PID: G502Hero,
     G502_LIGHTSPEED_PID: G502Lightspeed,
     G502_LIGHTSPEED_WIRED_PID: G502Lightspeed,

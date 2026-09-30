@@ -10,6 +10,7 @@ import logging
 
 from ..core.config import DeviceConfig, DPISettings, LightingSettings
 from ..core.device import (
+    BaseDevice,
     ConnectionType,
     DeviceCapability,
     DeviceInfo,
@@ -224,7 +225,7 @@ class ProDex2(G502Device):
 
 
 # Device registry mapping
-PRO_DEX_2_DEVICES = {
+PRO_DEX_2_DEVICES: dict[int, type[BaseDevice]] = {
     PRO_DEX_2_PID: ProDex2,
     PRO_DEX_2_WIRED_PID: ProDex2,
 }

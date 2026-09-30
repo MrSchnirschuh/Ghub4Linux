@@ -32,10 +32,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Register device classes
         from ..devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
-        from ..devices.powerplay import POWERPLAY_RECEIVER_HINTS
+        from ..devices.powerplay import POWERPLAY_DEVICES, POWERPLAY_RECEIVER_HINTS
         from ..devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
 
-        for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
+        for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES, **POWERPLAY_DEVICES}.items():
             self.device_manager.register_device_class(pid, cls)
 
         # Register hint-based entries for shared Lightspeed receiver PIDs

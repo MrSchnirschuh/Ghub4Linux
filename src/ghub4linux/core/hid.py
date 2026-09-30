@@ -31,6 +31,7 @@ from .hidpp import (
     FEATURE_ADJUSTABLE_DPI,
     FEATURE_BATTERY_STATUS,
     FEATURE_BATTERY_VOLTAGE,
+    FEATURE_COLOR_LED_EFFECTS,
     FEATURE_DEVICE_INFO,
     FEATURE_DEVICE_NAME,
     FEATURE_ERROR,
@@ -58,6 +59,7 @@ logger = logging.getLogger(__name__)
 # to assume, and it carries BatteryVoltage rather than BatteryStatus).
 DISCOVERABLE_FEATURES: tuple[int, ...] = (
     FEATURE_DEVICE_INFO,
+    FEATURE_DEVICE_NAME,
     FEATURE_ADJUSTABLE_DPI,
     FEATURE_EXTENDED_ADJUSTABLE_DPI,
     FEATURE_UNIFIED_BATTERY,
@@ -65,11 +67,12 @@ DISCOVERABLE_FEATURES: tuple[int, ...] = (
     FEATURE_BATTERY_VOLTAGE,
     FEATURE_LED_CONTROL,
     FEATURE_RGB_EFFECTS,
+    FEATURE_COLOR_LED_EFFECTS,
     FEATURE_REPORT_RATE,
     FEATURE_ONBOARD_PROFILES,
 )
 
-# Features that only a real peripheral has — not a dongle, not a companion chip.
+# Features that only a real peripheral has — not a dongle.
 PERIPHERAL_MARKER_FEATURES: tuple[int, ...] = (
     FEATURE_ADJUSTABLE_DPI,
     FEATURE_EXTENDED_ADJUSTABLE_DPI,
@@ -77,6 +80,9 @@ PERIPHERAL_MARKER_FEATURES: tuple[int, ...] = (
     FEATURE_ONBOARD_PROFILES,
     FEATURE_RGB_EFFECTS,
     FEATURE_LED_CONTROL,
+    # The POWERPLAY pad has neither DPI nor battery; its RGB engine is the only
+    # marker it carries, and without it the pad would be filtered out again.
+    FEATURE_COLOR_LED_EFFECTS,
 )
 
 # Receiver PIDs, re-exported under the names the device drivers use.
@@ -321,9 +327,15 @@ class HIDManager:
 
 
 def _is_internal(name: str) -> bool:
-    """True for dongles and companion chips that are not user-facing devices."""
-    lowered = name.lower()
-    return any(marker in lowered for marker in ("companion chip", "receiver"))
+    """True for dongles that are not user-facing devices.
+
+    A dongle's own HID++ interface is not something to configure — the mouse it
+    pairs is, and that mouse is enumerated separately.  "companion chip" is
+    deliberately *not* listed here: the POWERPLAY base calls itself "Candy
+    companion chip" while being a perfectly configurable device (its RGB logo),
+    so the marker test decides for it, not the name.
+    """
+    return "receiver" in name.lower()
 
 
 def _resolve_product_ids(devices: list[HIDDevice]) -> list[HIDDevice]:

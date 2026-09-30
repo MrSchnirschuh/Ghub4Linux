@@ -33,7 +33,7 @@ from .core.config import (
 )
 from .core.device import BaseDevice, DeviceCapability, DeviceManager
 from .devices.g502 import G502_DEVICES, G502_RECEIVER_HINTS
-from .devices.powerplay import POWERPLAY_RECEIVER_HINTS
+from .devices.powerplay import POWERPLAY_DEVICES, POWERPLAY_RECEIVER_HINTS
 from .devices.pro_dex import PRO_DEX_2_DEVICES, PRO_DEX_2_RECEIVER_HINTS
 from .style import dim
 
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 def _setup_manager() -> DeviceManager:
     config = AppConfig.load()
     manager = DeviceManager(config)
-    for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES}.items():
+    for pid, cls in {**G502_DEVICES, **PRO_DEX_2_DEVICES, **POWERPLAY_DEVICES}.items():
         manager.register_device_class(pid, cls)
     for pid, hint, cls in [  # type: ignore[assignment]
         *G502_RECEIVER_HINTS,
