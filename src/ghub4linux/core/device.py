@@ -485,23 +485,25 @@ class BaseDevice(ABC):
         return "Unknown"
 
     # ── report rate ──────────────────────────────────────────────────────────
+    #
+    # The API speaks **hertz**, not milliseconds.  Some features put a
+    # millisecond interval on the wire (ReportRate 0x8060) and others a rate
+    # code (ExtReportRate 0x8061), but hertz is the unit the device names its
+    # rates in and the only one that keeps the fast end apart: 1000, 2000, 4000
+    # and 8000 Hz all collapse onto "1 ms" in a millisecond representation, so
+    # a read-back check could report success for a rate that was never set.
     def get_report_rate_list(self) -> list[int]:
-        """Return the supported report intervals in milliseconds.
-
-        The wire protocol expresses report rate as a *millisecond interval*, not
-        as hertz: 1 ms is 1000 Hz, 8 ms is 125 Hz.  Devices with no report-rate
-        feature offer none.
-        """
+        """Return the supported report rates in hertz, ascending."""
         return []
 
     def get_report_rate(self) -> int | None:
-        """Return the active report interval in milliseconds."""
+        """Return the active report rate in hertz."""
         return None
 
     def set_report_rate(self, rate: int) -> bool:  # noqa: ARG002
-        """Set the report interval; returns False when the device has none.
+        """Set the report rate; returns False when the device has none.
 
-        Implementations accept either milliseconds or a hertz value.
+        Implementations accept hertz, and milliseconds (1-8) for convenience.
         """
         return False
 

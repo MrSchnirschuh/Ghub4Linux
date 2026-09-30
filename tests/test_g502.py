@@ -166,28 +166,41 @@ class TestDeviceInfo:
 
 
 class TestReportRate:
-    """Report rate: milliseconds on the wire, hertz in the UI.
+    """Report rate: a millisecond interval on the wire, hertz in the API.
 
     The protocol expresses the rate as a *millisecond interval* (``0x8060``
     fn 0 returns a bitfield of them, fn 1 the active one, fn 2 writes one), so
     the previous implementation — invented hertz codes written through fn 0 of a
     hardcoded feature index — never touched the real feature.
+
+    The API is in **hertz** even though the wire is in milliseconds, because a
+    millisecond representation cannot tell the fast rates apart: 1000, 2000,
+    4000 and 8000 Hz would all read as "1 ms".
     """
 
-    def test_milliseconds_pass_through(self):
-        assert G502Device._to_milliseconds(1) == 1
-        assert G502Device._to_milliseconds(8) == 8
+    def test_milliseconds_are_normalised_to_hertz(self):
+        assert G502Device._to_hertz(1) == 1000
+        assert G502Device._to_hertz(8) == 125
 
     @pytest.mark.parametrize(("hz", "ms"), [(1000, 1), (500, 2), (250, 4), (125, 8)])
-    def test_hertz_is_converted(self, hz, ms):
+    def test_hertz_survives_and_converts_to_the_wire_value(self, hz, ms):
+        assert G502Device._to_hertz(hz) == hz
         assert G502Device._to_milliseconds(hz) == ms
 
     @pytest.mark.parametrize("rate", [0, 100, 2000, -1, 7])
     def test_unrepresentable_rates_are_rejected(self, rate):
         # 7 is neither a valid interval (1-8 is legal, but 7 ms = 143 Hz is not
         # a rate this device family offers) nor a known hertz value.
-        result = G502Device._to_milliseconds(rate)
-        assert result is None or result == 7
+        assert G502Device._to_hertz(rate) is None
+
+    def test_the_fast_rates_stay_distinguishable(self):
+        """The reason the API is not in milliseconds: this must not collapse."""
+        assert {G502Device._to_hertz(rate) for rate in (125, 250, 500, 1000)} == {
+            125,
+            250,
+            500,
+            1000,
+        }
 
     def test_set_without_a_connection_reports_failure(self, hid_device):
         """No connection means no write happened — must not claim success."""

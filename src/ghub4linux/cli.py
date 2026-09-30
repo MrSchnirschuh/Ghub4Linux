@@ -182,7 +182,7 @@ def cmd_report_rate(_manager: DeviceManager, device: BaseDevice, args: argparse.
     """Get or set the polling/report rate of a device."""
     if not device.has_capability(DeviceCapability.REPORT_RATE):
         if args.json:
-            print(json.dumps({"supported": [], "current_ms": None}))
+            print(json.dumps({"supported": [], "current_hz": None}))
             return
         print("Report rate not supported for this device.")
         return
@@ -195,26 +195,25 @@ def cmd_report_rate(_manager: DeviceManager, device: BaseDevice, args: argparse.
         applied = device.set_report_rate(wanted)
         current = device.get_report_rate()
         if args.json:
-            print(json.dumps({"applied": applied, "current_ms": current, "supported": supported}))
+            print(json.dumps({"applied": applied, "current_hz": current, "supported": supported}))
             return
         if not applied:
             # The device acknowledged the write but kept its old interval, or
             # refused it outright — either way, do not claim success.
-            print(f"Could not set the report rate to {wanted}. Device reports {current} ms.")
+            print(f"Could not set the report rate to {wanted}. Device reports {current} Hz.")
             return
-        print(f"Report rate set to {current} ms ({1000 // current if current else 0} Hz).")
+        print(f"Report rate set to {current} Hz.")
         return
 
     if args.json:
-        print(json.dumps({"current_ms": current, "supported": supported}))
+        print(json.dumps({"current_hz": current, "supported": supported}))
         return
     if current is None:
         print("Could not read the report rate.")
         return
-    print(f"Current: {current} ms ({1000 // current} Hz)")
+    print(f"Current: {current} Hz")
     if supported:
-        hertz = ", ".join(f"{1000 // ms} Hz ({ms} ms)" for ms in supported)
-        print(f"Supported: {hertz}")
+        print(f"Supported: {', '.join(f'{hertz} Hz' for hertz in supported)}")
 
 
 @_with_device

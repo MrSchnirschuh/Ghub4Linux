@@ -36,6 +36,21 @@ from .g502 import G502Device
 
 logger = logging.getLogger(__name__)
 
+# The extended report rate is an **enum code**, not a number of hertz: 0=125,
+# 1=250, 2=500, 3=1000, 4=2000, 5=4000, 6=8000 Hz.
+RATE_HERTZ_BY_CODE: dict[int, int] = {
+    0: 125,
+    1: 250,
+    2: 500,
+    3: 1000,
+    4: 2000,
+    5: 4000,
+    6: 8000,
+}
+RATE_CODE_BY_HERTZ: dict[int, int] = {hertz: code for code, hertz in RATE_HERTZ_BY_CODE.items()}
+# Millisecond intervals, for callers that speak in the classic 0x8060 style.
+RATE_HERTZ_BY_MS: dict[int, int] = {1: 1000, 2: 500, 4: 250, 8: 125}
+
 
 # PRO X 2 DEX product IDs.
 PRO_DEX_2_PID = 0x40B8  # PRO X 2 DEX (enumerates as its own device)
@@ -233,52 +248,57 @@ class ProDex2(G502Device):
         return 0 if self.info and self.info.connection_type == ConnectionType.WIRED else 1
 
     def get_report_rate_list(self) -> list[int]:
-        """Report intervals in milliseconds, as the base API expresses them."""
+        """Return the supported report rates in hertz, descending fastest first.
+
+        The capability answer is a bitmask where bit N means rate code N is
+        offered.  Reported in **hertz**: expressing these as millisecond
+        intervals would collapse 1000, 2000, 4000 and 8000 Hz onto the same
+        "1 ms" and make the panel unable to tell them apart.
+        """
         index = self._features.get(FEATURE_EXT_REPORT_RATE)
         if not index:
             return []
         frame = self._read_feature(index, 0x00, bytes([self._connection_code(), 0, 0]))
-        if len(frame) < 5:
+        if len(frame) < 6:
             return []
-        bitmask = frame[4]
-        # Bit N set means rate code N is offered; convert each code to hertz and
-        # then to the millisecond interval the caller expects (or the
-        # sub-millisecond rates as 0, which callers render as "no interval").
-        hertz_by_code = {0: 125, 1: 250, 2: 500, 3: 1000, 4: 2000, 5: 4000, 6: 8000}
-        intervals = []
-        for code, hertz in hertz_by_code.items():
-            if bitmask & (1 << code):
-                intervals.append(max(1, 1000 // hertz))
-        return sorted(set(intervals))
+        # The capability is a **u16 big-endian bitmask** at the start of the
+        # payload (frame[4:6]); reading only frame[4] would drop the three
+        # fastest rates, whose bits live in the second byte.
+        bitmask = int.from_bytes(bytes(frame[4:6]), "big")
+        return sorted(
+            (hertz for code, hertz in RATE_HERTZ_BY_CODE.items() if bitmask & (1 << code)),
+            reverse=True,
+        )
 
     def get_report_rate(self) -> int | None:
-        """Active report interval in milliseconds (None when unreadable)."""
+        """Return the active report rate in hertz, or None when unreadable."""
         index = self._features.get(FEATURE_EXT_REPORT_RATE)
         if not index:
             return None
         frame = self._read_feature(index, 0x02, bytes([self._connection_code(), 0, 0]))
         if len(frame) < 5:
             return None
-        hertz_by_code = {0: 125, 1: 250, 2: 500, 3: 1000, 4: 2000, 5: 4000, 6: 8000}
-        hertz = hertz_by_code.get(frame[4])
-        return max(1, 1000 // hertz) if hertz else None
+        return RATE_HERTZ_BY_CODE.get(frame[4])
 
     def set_report_rate(self, rate: int) -> bool:
-        """Set the report interval, given in milliseconds or hertz."""
+        """Set the report rate, given in hertz (or milliseconds 1-8).
+
+        The device takes a **rate code**, not a number of hertz, so the value is
+        mapped and then read back.  A write that is acknowledged but ignored must
+        not be reported as success.
+        """
         index = self._features.get(FEATURE_EXT_REPORT_RATE)
         if not index:
             return False
 
-        hertz = rate if rate > 100 else 1000 // rate
-        code_by_hertz = {125: 0, 250: 1, 500: 2, 1000: 3, 2000: 4, 4000: 5, 8000: 6}
-        code = code_by_hertz.get(hertz)
+        hertz = RATE_HERTZ_BY_MS.get(rate, rate) if rate <= 8 else rate
+        code = RATE_CODE_BY_HERTZ.get(hertz)
         if code is None:
             logger.warning(f"{self.name}: {hertz} Hz is not a rate this device offers")
             return False
 
         supported = self.get_report_rate_list()
-        wanted_interval = max(1, 1000 // hertz)
-        if supported and wanted_interval not in supported:
+        if supported and hertz not in supported:
             logger.warning(f"{self.name}: {hertz} Hz is not supported (device offers {supported})")
             return False
 
@@ -286,13 +306,10 @@ class ProDex2(G502Device):
         if not frame:
             return False
         # Read back rather than trust the acknowledgement.
-        applied = self.get_report_rate() == wanted_interval
-        if not applied:
-            logger.warning(f"{self.name}: report rate {hertz} Hz not applied")
-        return applied
+        return self.get_report_rate() == hertz
 
 
-# Device registry mapping
+# Driver registry entries, consumed by the CLI and the GUI.
 PRO_DEX_2_DEVICES: dict[int, type[BaseDevice]] = {
     PRO_DEX_2_PID: ProDex2,
     PRO_DEX_2_WIRED_PID: ProDex2,

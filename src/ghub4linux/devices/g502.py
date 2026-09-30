@@ -463,68 +463,82 @@ class G502Device(BaseDevice):
     # invented hertz codes through the wrong function on a hardcoded feature
     # index, which silently wrote to whatever feature happened to live there.
 
+    # ReportRate 0x8060 puts a **millisecond interval** on the wire (bit N of
+    # fn 0 means N+1 ms, 1 ms being 1000 Hz), but the public API speaks hertz so
+    # that the fast end stays distinguishable and matches the other driver.
+
+    @staticmethod
+    def _to_hertz(rate: int) -> int | None:
+        """Normalise a rate given either in hertz or as millisecond interval."""
+        if rate in (1, 2, 4, 8):
+            return 1000 // rate
+        if rate in (125, 250, 500, 1000):
+            return rate
+        return None
+
+    @staticmethod
+    def _to_milliseconds(hertz: int) -> int | None:
+        """The millisecond interval the wire wants for a hertz value."""
+        return 1000 // hertz if hertz in (125, 250, 500, 1000) else None
+
     def get_report_rate_list(self) -> list[int]:
-        """Return the supported report intervals in milliseconds."""
+        """Return the supported report rates in hertz, fastest first."""
         index = self._features.get(FEATURE_REPORT_RATE)
         if not index:
             return []
         frame = self._read_feature(index, 0x00)
         if len(frame) < 5:
             return []
-        bitfield = frame[4]
-        return [
-            milliseconds for milliseconds in range(1, 9) if bitfield & (1 << (milliseconds - 1))
-        ]
+        return sorted(
+            (
+                1000 // milliseconds
+                for milliseconds in range(1, 9)
+                if frame[4] & (1 << (milliseconds - 1))
+            ),
+            reverse=True,
+        )
 
     def get_report_rate(self) -> int | None:
-        """Return the active report interval in milliseconds."""
+        """Return the active report rate in hertz."""
         index = self._features.get(FEATURE_REPORT_RATE)
         if not index:
             return None
         frame = self._read_feature(index, 0x01)
         if len(frame) < 5 or not frame[4]:
             return None
-        return frame[4]
+        return 1000 // frame[4]
 
     def set_report_rate(self, rate: int) -> bool:
-        """Set the report interval in milliseconds.
+        """Set the report rate, given in hertz (or milliseconds 1-8).
 
-        Accepts milliseconds (1-8) as the protocol defines them.  Hertz values
-        such as 1000 are accepted too, because that is how users and mice are
-        usually described, and converted.
+        The wire takes a millisecond interval, so the value is converted and
+        then read back — this hardware acknowledges the write and ignores it, so
+        the return value alone would be a false success.
         """
         index = self._features.get(FEATURE_REPORT_RATE)
         if not index or not self._connection:
             return False
 
-        milliseconds = self._to_milliseconds(rate)
+        hertz = self._to_hertz(rate)
+        if hertz is None:
+            logger.warning(f"{self.name}: {rate} is neither a supported rate nor an interval")
+            return False
+        milliseconds = self._to_milliseconds(hertz)
         if milliseconds is None:
             return False
+
         supported = self.get_report_rate_list()
-        if supported and milliseconds not in supported:
-            logger.warning(
-                f"{self.name}: {milliseconds} ms is not supported (device offers {supported})"
-            )
+        if supported and hertz not in supported:
+            logger.warning(f"{self.name}: {hertz} Hz is not supported (device offers {supported})")
             return False
 
         frame = self._read_feature(index, 0x02, bytes([milliseconds]))
         if not frame:
             return False
-        # Read back rather than assume the device accepted the value.
-        applied = self.get_report_rate() == milliseconds
+        applied = self.get_report_rate() == hertz
         if not applied:
-            logger.warning(f"{self.name}: report rate {milliseconds} ms not applied")
+            logger.warning(f"{self.name}: report rate {hertz} Hz not applied")
         return applied
-
-    @staticmethod
-    def _to_milliseconds(rate: int) -> int | None:
-        """Normalise a rate given either in milliseconds or in hertz."""
-        if rate in (1, 2, 3, 4, 5, 6, 7, 8):
-            return rate
-        if rate in (125, 250, 500, 1000):
-            # 1000 Hz = 1 ms, 500 Hz = 2 ms, 250 Hz = 4 ms, 125 Hz = 8 ms.
-            return 1000 // rate
-        return None
 
 
 class G502Lightspeed(G502Device):

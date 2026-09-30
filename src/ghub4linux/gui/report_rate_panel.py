@@ -52,7 +52,7 @@ class ReportRatePanel(Gtk.Box):
         self.append(description)
 
         if current is not None:
-            current_label = Gtk.Label(label=f"Current: {current} ms ({1000 // current} Hz)")
+            current_label = Gtk.Label(label=f"Current: {current} Hz")
             current_label.set_halign(Gtk.Align.START)
         else:
             current_label = Gtk.Label(label="Current rate could not be read.")
@@ -71,14 +71,14 @@ class ReportRatePanel(Gtk.Box):
         self.group = Gtk.CheckButton()
         self.group.set_visible(False)
         self.buttons: list[tuple[Gtk.CheckButton, int]] = []
-        for milliseconds in sorted(supported):
-            hertz = 1000 // milliseconds
-            button = Gtk.CheckButton(label=f"{hertz} Hz ({milliseconds} ms)")
+        # Fastest first, which is how vendor software presents it.
+        for hertz in sorted(supported, reverse=True):
+            button = Gtk.CheckButton(label=f"{hertz} Hz")
             button.set_group(self.group)
-            if milliseconds == current:
+            if hertz == current:
                 button.set_active(True)
             self.append(button)
-            self.buttons.append((button, milliseconds))
+            self.buttons.append((button, hertz))
 
         apply_btn = Gtk.Button(label="Apply Polling Rate")
         apply_btn.add_css_class("suggested-action")
@@ -88,10 +88,7 @@ class ReportRatePanel(Gtk.Box):
 
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Write the selected rate and report honestly whether it took."""
-        chosen = next(
-            (milliseconds for button, milliseconds in self.buttons if button.get_active()),
-            None,
-        )
+        chosen = next((hertz for button, hertz in self.buttons if button.get_active()), None)
         if chosen is None:
             return
 
@@ -102,14 +99,12 @@ class ReportRatePanel(Gtk.Box):
         actual = self.device.get_report_rate()
 
         if applied and actual == chosen:
-            message = f"Polling rate set to {1000 // chosen} Hz."
+            message = f"Polling rate set to {chosen} Hz."
             logger.info(message)
         else:
-            message = (
-                f"The device kept {actual} ms ({1000 // actual if actual else 0} Hz); "
-                f"it does not accept this setting from the computer."
-            )
-            logger.warning(f"{self.device.name}: report rate {chosen} ms not applied")
+            kept = f"{actual} Hz" if actual else "an unreadable rate"
+            message = f"The device kept {kept}; it does not accept this setting from the computer."
+            logger.warning(f"{self.device.name}: report rate {chosen} Hz not applied")
 
         if hasattr(root, "show_toast"):
             root.show_toast(message)
