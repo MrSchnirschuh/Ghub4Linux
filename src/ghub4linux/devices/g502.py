@@ -363,6 +363,24 @@ class G502Device(BaseDevice):
     # actually resolved on this model — the write was acknowledged and changed
     # nothing.
 
+    def lighting_effect_ids(self) -> dict[str, int]:
+        """Map each offered effect name to the ID this device uses for it.
+
+        The panel needs this to show what a speed value means in period terms;
+        the mapping is per device because an effect can be implemented by more
+        than one ID (breathing ships as both the waveform and the legacy
+        variant) and the device decides which.
+        """
+        if not self._rgb:
+            return {}
+        mapping: dict[str, int] = {}
+        for zone in self._rgb.zones:
+            for entry in zone.effects:
+                name = entry.config_name
+                if name and name not in mapping:
+                    mapping[name] = entry.effect_id
+        return mapping
+
     def supported_lighting_effects(self) -> list[str]:
         """Effect names this mouse actually offers, read from its own engine."""
         if not self._rgb:

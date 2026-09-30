@@ -469,6 +469,10 @@ class BaseDevice(ABC):
             return False
         return self._set_lighting_settings(settings)
 
+    def lighting_effect_ids(self) -> dict[str, int]:
+        """Effect name -> ID, empty for devices that cannot enumerate them."""
+        return {}
+
     def _set_lighting_settings(self, settings: LightingSettings) -> bool:  # noqa: ARG002
         """Implementation of lighting settings."""
         return False

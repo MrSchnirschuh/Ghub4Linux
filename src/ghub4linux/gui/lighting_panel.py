@@ -11,6 +11,7 @@ from gi.repository import Gdk, Gtk  # noqa: E402
 
 from ..core.config import LightingEffect, LightingSettings, RGBColor  # noqa: E402
 from ..core.device import BaseDevice  # noqa: E402
+from ..core.speed import speed_for_effect  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class LightingPanel(Gtk.Box):
         self.effect_names = supported
         for effect in supported:
             self.effect_combo.append_text(effect.capitalize())
+        self.effect_combo.connect("changed", self._on_speed_changed)
         self.effect_combo.set_active(0)
         self.effect_combo.set_hexpand(True)
         effect_box.append(self.effect_combo)
@@ -100,16 +102,30 @@ class LightingPanel(Gtk.Box):
         brightness_box.append(self.brightness_scale)
         self.append(brightness_box)
 
-        # Speed slider
+        # Speed slider.
+        #
+        # The slider offers "speed" (higher is faster) and the conversion into
+        # the period the wire wants happens in the driver.  The resulting period
+        # is shown next to it, because the effect ranges differ widely (Cycling
+        # only animates from 4000 ms upwards) and seeing the value makes that
+        # understandable instead of surprising.
         speed_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         speed_label = Gtk.Label(label="Speed")
         speed_box.append(speed_label)
 
-        self.speed_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 100, 1)
+        self.speed_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self.speed_scale.set_value(settings.effect.speed)
         self.speed_scale.set_hexpand(True)
+        self.speed_scale.connect("value-changed", self._on_speed_changed)
         speed_box.append(self.speed_scale)
+
+        self.period_label = Gtk.Label(label="")
+        self.period_label.add_css_class("dim-label")
+        self.period_label.set_width_chars(22)
+        self.period_label.set_halign(Gtk.Align.END)
+        speed_box.append(self.period_label)
         self.append(speed_box)
+        self._update_period_label()
 
         # Apply button
         apply_btn = Gtk.Button(label="Apply Lighting")
@@ -117,6 +133,40 @@ class LightingPanel(Gtk.Box):
         apply_btn.set_margin_top(24)
         apply_btn.connect("clicked", self._on_apply)
         self.append(apply_btn)
+
+    def _selected_effect_id(self) -> int | None:
+        """Effect ID of the currently selected effect, if it is known."""
+        index = self.effect_combo.get_active()
+        if not (0 <= index < len(self.effect_names)):
+            return None
+        name = self.effect_names[index]
+        getter = getattr(self.device, "lighting_effect_ids", None)
+        if callable(getter):
+            mapping = getter()
+            if name in mapping:
+                found = mapping[name]
+                if isinstance(found, int):
+                    return found
+        from ..core.rgb import EFFECT_IDS_BY_NAME
+
+        ids = EFFECT_IDS_BY_NAME.get(name)
+        return ids[0] if ids else None
+
+    def _update_period_label(self) -> None:
+        """Show the period the current speed produces for the chosen effect."""
+        if not hasattr(self, "period_label"):
+            return
+        speed = int(self.speed_scale.get_value())
+        effect_id = self._selected_effect_id()
+        if effect_id is None:
+            self.period_label.set_text(f"speed {speed}")
+            return
+        period = speed_for_effect(effect_id, speed)
+        self.period_label.set_text(f"{period} ms per cycle")
+
+    def _on_speed_changed(self, *_args: object) -> None:
+        """Keep the period readout in step with the slider."""
+        self._update_period_label()
 
     def _supported_effects(self) -> list[str]:
         """Effects the device itself reports, falling back to a sane minimum.
