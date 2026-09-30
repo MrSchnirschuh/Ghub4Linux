@@ -1,11 +1,36 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Mouse body -->
-  <rect x="34" y="32" width="60" height="80" rx="30" ry="30" fill="#3584e4"/>
-  <!-- Mouse divider line -->
-  <line x1="64" y1="32" x2="64" y2="72" stroke="white" stroke-width="3"/>
-  <!-- Scroll wheel -->
-  <rect x="57" y="48" width="14" height="24" rx="7" ry="7" fill="white" opacity="0.85"/>
-  <!-- Left click highlight -->
-  <path d="M34 62 Q34 32 64 32 L64 72 Q49 72 34 62 Z" fill="white" opacity="0.15"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0%" stop-color="#1b2534"/>
+      <stop offset="100%" stop-color="#0b0e14"/>
+    </linearGradient>
+    <linearGradient id="shell" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#e4ebf5"/>
+      <stop offset="100%" stop-color="#bcc7d6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00c2e0"/>
+      <stop offset="100%" stop-color="#2f6fed"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#bg)"/>
+  <rect x="0.75" y="0.75" width="126.5" height="126.5" rx="27.25" fill="none"
+        stroke="#33425a" stroke-width="1.5"/>
+
+  <!-- Mouse: tall body, generous radius and area so the silhouette still
+       reads at 16 px. No cable, no stray thin lines. -->
+  <path d="M64 18c17 0 29 12 29 29v34c0 17-12 29-29 29s-29-12-29-29V47c0-17 12-29 29-29z"
+        fill="url(#shell)"/>
+
+  <!-- Button split: short and thick, stops above the wheel -->
+  <path d="M64 18v16" stroke="#0b0e14" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Scroll wheel: solid accent bar, the one colour that carries the icon -->
+  <rect x="58" y="42" width="12" height="22" rx="6" fill="url(#accent)"/>
+
+  <!-- Soft inner shade low on the body for depth without a hard edge -->
+  <path d="M64 110c-14 0-25-9-28-21 5 8 16 13 28 13s23-5 28-13c-3 12-14 21-28 21z"
+        fill="#8fa3bd" opacity="0.35"/>
 </svg>

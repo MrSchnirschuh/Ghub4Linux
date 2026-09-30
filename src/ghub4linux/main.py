@@ -33,6 +33,10 @@ class Ghub4LinuxApplication(Adw.Application):
             application_id="com.github.mrschnirschuh.ghub4linux",
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
+        # Without this the window falls back to a generic icon whenever the app
+        # is started from the source tree or from a terminal rather than through
+        # the desktop entry.
+        Gtk.Window.set_default_icon_name("com.github.mrschnirschuh.ghub4linux")
         self.config = AppConfig.load()
         self.window: MainWindow | None = None
 
