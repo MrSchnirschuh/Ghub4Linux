@@ -92,10 +92,14 @@ class G502Device(BaseDevice):
         """Seed the profile's DPI levels from what the sensor actually runs.
 
         The profile starts with the class defaults (400…6400), which have
-        nothing to do with the real device: a mouse left at 25600 DPI would be
-        shown as "800 DPI active".  The current sensor resolution is read back
-        and the active level is set to the matching entry, so the GUI and the
-        CLI agree with the hardware.
+        nothing to do with the real device: a mouse left at 1450 DPI (set with
+        the hardware button) would be shown as "800 DPI active".  The current
+        sensor resolution is read back and the active level is set to the
+        matching entry, so the GUI and the CLI agree with the hardware.
+
+        A value that matches no preset is reported by occupying a single extra
+        slot, which is reused on the next change instead of appending a new
+        entry every time — otherwise the list would grow on every scan.
         """
         if not self.has_capability(DeviceCapability.DPI_ADJUSTMENT):
             return
@@ -110,11 +114,16 @@ class G502Device(BaseDevice):
                 settings.active_level = index
                 return
 
-        # Not one of the presets: keep the list but append the real value so it
-        # is selectable and the active entry tells the truth.
-        levels.append(DPILevel(dpi=current, color=RGBColor(255, 0, 255)))
+        presets = self.DEFAULT_DPI_LEVELS
+        extra = [i for i, level in enumerate(levels) if level.dpi not in presets]
+        if len(levels) > len(presets) and extra:
+            slot = extra[-1]
+            levels[slot] = DPILevel(dpi=current, color=levels[slot].color)
+        else:
+            slot = len(levels)
+            levels.append(DPILevel(dpi=current, color=RGBColor(255, 0, 255)))
         settings.levels = levels
-        settings.active_level = len(levels) - 1
+        settings.active_level = slot
 
     def _apply_capabilities(self) -> None:
         """Declare only the capabilities the device actually reported.

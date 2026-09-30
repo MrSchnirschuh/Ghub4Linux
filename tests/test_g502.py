@@ -191,3 +191,57 @@ class TestCapabilities:
         assert DeviceCapability.ONBOARD_PROFILES in caps
         assert DeviceCapability.BATTERY_STATUS in caps
         assert DeviceCapability.REPORT_RATE in caps
+
+
+class TestDpiLevelSync:
+    """The profile's DPI levels must mirror the sensor without growing."""
+
+    def _device(self):
+        from ghub4linux.core.config import DeviceConfig
+        from ghub4linux.core.device import DeviceCapability
+        from ghub4linux.core.hid import HIDDevice
+        from ghub4linux.devices.g502 import G502Lightspeed
+
+        hid = HIDDevice(
+            vendor_id=0x046D,
+            product_id=0x407F,
+            serial_number="x",
+            manufacturer="Logitech",
+            product="G502",
+            path=b"/dev/hidraw15",
+            interface_number=0xFF,
+            usage_page=0xFF00,
+            usage=1,
+            node="/dev/hidraw15",
+            device_index=0xFF,
+            identified=True,
+        )
+        device = G502Lightspeed(hid, DeviceConfig(device_id="x", device_name="G502"))
+        device._capabilities = set(device._capabilities) | {DeviceCapability.DPI_ADJUSTMENT}
+        return device
+
+    def test_a_preset_value_selects_that_level(self):
+        device = self._device()
+        device.get_sensor_dpi = lambda _sensor=0: 3200
+        device._sync_dpi_levels()
+        settings = device.active_profile.dpi_settings
+        assert settings.levels[settings.active_level].dpi == 3200
+
+    def test_an_off_preset_value_reuses_one_extra_slot(self):
+        device = self._device()
+        baseline = len(device.active_profile.dpi_settings.levels)
+        for value in (1450, 1234, 2000, 1450):
+            device.get_sensor_dpi = lambda _sensor=0, v=value: v
+            device._sync_dpi_levels()
+            settings = device.active_profile.dpi_settings
+            # The list must not grow past one extra slot, however often the
+            # hardware button is used.
+            assert len(settings.levels) == baseline + 1
+            assert settings.levels[settings.active_level].dpi == value
+
+    def test_no_sensor_reading_leaves_the_levels_untouched(self):
+        device = self._device()
+        device.get_sensor_dpi = lambda _sensor=0: None
+        before = [level.dpi for level in device.active_profile.dpi_settings.levels]
+        device._sync_dpi_levels()
+        assert [level.dpi for level in device.active_profile.dpi_settings.levels] == before
