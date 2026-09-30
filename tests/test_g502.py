@@ -14,6 +14,7 @@ from ghub4linux.core.device import (
 )
 from ghub4linux.core.hid import HIDDevice
 from ghub4linux.devices.g502 import (
+    _EFFECT_BY_NAME,
     G502_DEVICES,
     G502_HERO_PID,
     G502_LIGHTSPEED_PID,
@@ -49,24 +50,46 @@ def make_device(cls, hid, **config_kwargs):
     return cls(hid, DeviceConfig(device_id=hid.device_id, device_name="G502", **config_kwargs))
 
 
-class TestEffectCode:
-    """_get_effect_code maps effect types to HID++ codes."""
+class TestEffectCodes:
+    """Effect types map onto the documented colorLedEffects (0x8070) IDs.
+
+    The old implementation carried its own invented code table and pushed it
+    through functions that do not take an effect at all, which is why nothing
+    but static appeared to work.  These are the engine's real IDs.
+    """
 
     @pytest.mark.parametrize(
-        ("effect_type", "code"),
+        ("effect_type", "effect_id"),
         [
-            ("off", 0x00),
-            ("static", 0x01),
-            ("breathing", 0x02),
-            ("cycle", 0x03),
-            ("wave", 0x04),
+            ("off", 0x0000),
+            ("static", 0x0001),
+            ("breathing", 0x0002),
+            ("cycle", 0x0003),
+            ("wave", 0x0004),
+            ("starlight", 0x0005),
+            ("press", 0x0006),
+            ("ripple", 0x000B),
         ],
     )
-    def test_known_effects(self, hid_device, effect_type, code):
-        assert make_device(G502Hero, hid_device)._get_effect_code(effect_type) == code
+    def test_known_effects(self, effect_type, effect_id):
+        assert _EFFECT_BY_NAME[effect_type] == effect_id
 
-    def test_unknown_effect_defaults_to_static(self, hid_device):
-        assert make_device(G502Hero, hid_device)._get_effect_code("rainbow") == 0x01
+    def test_unknown_effect_is_not_mapped(self):
+        """An unknown name must not silently become some effect ID."""
+        assert "rainbow" not in _EFFECT_BY_NAME
+
+    def test_ids_are_distinct(self):
+        """Two names pointing at one ID would make one of them unreachable."""
+        values = list(_EFFECT_BY_NAME.values())
+        assert len(values) == len(set(values))
+
+    def test_g502_has_no_lighting_without_a_connection(self, hid_device):
+        """Without 0x8070 resolved there is nothing to write to."""
+        dev = make_device(G502Hero, hid_device)
+        assert dev._rgb is None
+        assert dev.supported_lighting_effects() == []
+        assert dev.lighting_zones() == []
+        assert dev.set_lighting_settings(LightingSettings()) is False
 
 
 class TestConnectionType:
@@ -166,27 +189,25 @@ class TestReportRate:
 
 
 class TestZoneLighting:
-    """G502X Plus zone lighting."""
+    """Per-zone lighting.
 
-    def test_valid_zone_updates_local_config(self, hid_device):
+    Zones are read from the device's 0x8070 engine, not from a fixed name list:
+    without a connection there are no zones, and claiming a write succeeded
+    would be the same lie the old "mock success" path told.
+    """
+
+    def test_no_zones_without_a_connection(self, hid_device):
         dev = make_device(G502XPlus, hid_device)
-        effect = LightingEffect(effect_type="breathing")
-        # No HID connection -> _set_lighting_settings updates local config and
-        # returns True; the effect is recorded on the active profile.
-        assert dev.set_zone_lighting("logo", effect) is True
-        assert dev.active_profile.lighting_settings.zones["logo"] is effect
+        assert dev.set_zone_lighting("logo", LightingEffect(effect_type="breathing")) is False
 
-    def test_zone_set_after_enable(self, hid_device):
+    def test_unknown_zone_is_rejected(self, hid_device):
+        dev = make_device(G502XPlus, hid_device)
+        assert dev.set_zone_lighting("nonexistent_zone", LightingEffect()) is False
+
+    def test_setting_lighting_without_the_engine_reports_failure(self, hid_device):
         dev = make_device(G502XPlus, hid_device)
         settings = LightingSettings(enabled=True)
-        dev.active_profile.lighting_settings = settings
-        effect = LightingEffect(effect_type="cycle")
-        assert dev.set_zone_lighting("dpi_indicator", effect) is True
-
-    def test_invalid_zone_rejected(self, hid_device):
-        dev = make_device(G502XPlus, hid_device)
-        effect = LightingEffect()
-        assert dev.set_zone_lighting("nonexistent_zone", effect) is False
+        assert dev.set_lighting_settings(settings) is False
 
 
 class TestRegistry:

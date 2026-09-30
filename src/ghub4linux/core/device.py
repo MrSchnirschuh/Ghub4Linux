@@ -16,13 +16,41 @@ from .hid import HIDConnection, HIDDevice, HIDError, HIDManager
 
 logger = logging.getLogger(__name__)
 
-# Coarse unifiedBattery level enum (1=critical, 2=low, 4=good, 8=full) mapped
-# to a representative percentage.
-_LEVEL_ENUM_TO_PERCENT: dict[int, int] = {1: 5, 2: 20, 4: 60, 8: 100}
-
 # Lithium-polymer discharge curve: 4200 mV is full, 3500 mV is empty.
 _MV_FULL = 4200
 _MV_EMPTY = 3500
+
+
+# Coarse battery level enum reported by the 0x1004 unifiedBattery feature
+# (get_battery_info, byte 1).  These are *level* codes, not a percentage.
+_UNIFIED_LEVEL_NAMES: dict[int, str] = {1: "critical", 2: "low", 4: "good", 8: "full"}
+
+# Charging status enum reported by 0x1004 get_battery_info (byte 2) and by the
+# 0x1000 batteryStatus feature (byte 2).  Verified against Solaar's
+# BatteryStatus flag definitions and OpenLogi's spec for x1004.
+_CHARGE_STATUS_NAMES: dict[int, str] = {
+    0: "discharging",
+    1: "charging",
+    2: "charging slowly",
+    3: "full",
+    4: "error",
+}
+
+# The G-series voltage-only devices expose no charge percentage at all, and the
+# voltage alone cannot distinguish "on the PowerPlay pad" from "in a drawer".
+# The honest label is therefore unknown rather than a guessed number.
+CHARGING_UNKNOWN = None
+
+
+def _charge_state_from_status(status: int) -> bool | None:
+    """Map a 0x1004/0x1000 status byte to charging / not charging / unknown."""
+    if status in (1, 2):  # charging, charging slowly
+        return True
+    if status in (0, 3):  # discharging, full
+        return False
+    # 4 = the battery subsystem reported an error; anything else is a code this
+    # build does not know.  Neither justifies an invented yes/no.
+    return CHARGING_UNKNOWN
 
 
 def _percent_from_millivolts(millivolts: int) -> int:
@@ -31,10 +59,44 @@ def _percent_from_millivolts(millivolts: int) -> int:
     ``0x1001 batteryVoltage`` reports only a voltage, but the GUI wants a
     percentage, so the usual linear approximation between empty and full is
     used and clamped to 0..100.
+
+    This is an estimate and is documented as one: the device never sends a real
+    percentage, so a consumer must not present the result as a measurement.
     """
     span = _MV_FULL - _MV_EMPTY
     percent = round((millivolts - _MV_EMPTY) / span * 100)
     return max(0, min(100, percent))
+
+
+def _voltage_charge_state(flags: int) -> bool | None:
+    """Decode the 0x1001 charging-flags byte.
+
+    Verified against OpenLogi's spec for ``x1001 batteryVoltage``:
+
+    * bit 7 — external power present.  When clear the device runs on battery and
+      every other bit is meaningless.
+    * bits 0-1 — charge status; ``0b01``/``0b11`` means full and ``0b10`` means
+      on external power but not charging (a charge fault).  Takes precedence
+      over the rate bits.
+    * bit 3 — fast charging, bit 4 — slow charging.
+
+    Returns ``None`` when the byte contradicts itself rather than guessing: on
+    the G502 Lightspeed this byte reads ``0x00`` even while the device sits on a
+    PowerPlay pad and is demonstrably charging, so the honest answer there is
+    "cannot tell from this value".
+    """
+    if not flags & 0x80:
+        return False
+
+    status_bits = flags & 0x03
+    if status_bits in (0x01, 0x03):
+        return False  # on external power, charge complete
+    if status_bits == 0x02:
+        return False  # on external power, not charging (fault)
+    if flags & 0x08 or flags & 0x10:
+        return True  # fast / slow charging
+    # External power is set but no rate and no completion status is reported.
+    return CHARGING_UNKNOWN
 
 
 class DeviceType(Enum):
@@ -74,11 +136,50 @@ class DeviceInfo:
 
 @dataclass
 class BatteryStatus:
-    """Battery status information."""
+    """Battery status information.
 
-    level: int  # 0-100 percentage
-    charging: bool
+    ``level`` is ``None`` when the device does not report a percentage — the
+    G-series voltage-only devices never do.  Consumers must render an unknown
+    level as unknown; inventing one is what made the previous build claim a
+    percentage the hardware never sent.
+
+    ``charging`` is ``None`` when the device's own status byte cannot say.  The
+    G502 reports a flags byte of ``0x00`` even while charging on a PowerPlay
+    pad, so "not charging" there would be a claim the hardware contradicts.
+
+    ``estimated`` marks a level that was derived (for example from a voltage
+    curve) rather than reported, so a UI can label it honestly.
+    """
+
+    level: int | None  # 0-100 percentage, or None when unreported
+    charging: bool | None
     voltage: float | None = None  # Optional voltage reading
+    status_text: str | None = None  # device-reported state, e.g. "discharging"
+    estimated: bool = False  # True when level was derived, not reported
+
+    def describe(self) -> str:
+        """Human-readable one-liner that never states more than was measured.
+
+        Used by the CLI, the sidebar and the settings panel so all three agree.
+        """
+        parts: list[str] = []
+        if self.level is None:
+            parts.append("level unknown")
+        else:
+            estimate = "~" if self.estimated else ""
+            parts.append(f"{estimate}{self.level}%")
+
+        if self.charging is True:
+            parts.append("charging")
+        elif self.charging is False:
+            # "not charging" is only worth saying when the device really said
+            # so; when it is unknown the level line already carries that.
+            parts.append("not charging")
+        if self.status_text and self.status_text not in ("voltage only",):
+            parts.append(self.status_text)
+        if self.voltage is not None:
+            parts.append(f"{self.voltage:.3f} V")
+        return ", ".join(parts)
 
 
 class DeviceCapability(Enum):
@@ -218,8 +319,11 @@ class BaseDevice(ABC):
 
         Logitech ships three variants and a device carries exactly one:
 
-        * ``0x1004`` UnifiedBattery — fn 0 returns the charge percentage,
-          fn 1 a coarse level/charging enum.
+        * ``0x1004`` UnifiedBattery — **fn 0 returns capabilities, fn 1 the
+          actual charge**.  Reading fn 0 and treating its capability bits as a
+          charge is what made a PRO X 2 DEX report "15%, charging" while the
+          device was at 82% and discharging: ``0f 0f 02`` is a level bitmask of
+          0x0f plus "percentage supported", not a measurement.
         * ``0x1000`` BatteryStatus — fn 0 returns ``[discharge_level,
           next_level, status]`` where *status* is an enum (0 = discharging,
           1..4 = charging), **not** a bitmask.
@@ -227,7 +331,7 @@ class BaseDevice(ABC):
           flags]`` as a big-endian millivolt reading plus charging flags.  This
           is the only battery source on G-series wireless mice such as the
           G502 Lightspeed; it reports no percentage, so one is estimated from
-          the voltage.
+          the voltage and flagged as an estimate.
         """
         from .hidpp import (
             FEATURE_BATTERY_STATUS,
@@ -237,14 +341,22 @@ class BaseDevice(ABC):
 
         unified = features.get(FEATURE_UNIFIED_BATTERY)
         if unified:
-            frame = self._read_feature(unified)
-            if len(frame) >= 6 and frame[4] <= 100:
-                return BatteryStatus(level=frame[4], charging=bool(frame[5] & 0x0F))
-            level = self._read_feature(unified, 0x01)
-            if len(level) >= 6:
+            # fn 1 is get_battery_info: [percentage, level, status, ...].
+            # fn 0 is get_battery_capabilities and carries no measurement.
+            frame = self._read_feature(unified, 0x01)
+            if len(frame) >= 7:
+                percentage, status = frame[4], frame[6]
                 return BatteryStatus(
-                    level=_LEVEL_ENUM_TO_PERCENT.get(level[5], 0),
-                    charging=bool(level[6] & 0x0F) if len(level) > 6 else False,
+                    level=percentage if percentage <= 100 else None,
+                    charging=_charge_state_from_status(status),
+                    status_text=_CHARGE_STATUS_NAMES.get(status),
+                )
+            # Some firmware answers fn 1 with a coarse level only.
+            if len(frame) >= 6 and frame[4] in _UNIFIED_LEVEL_NAMES:
+                return BatteryStatus(
+                    level=None,
+                    charging=None,
+                    status_text=_UNIFIED_LEVEL_NAMES[frame[4]],
                 )
 
         legacy = features.get(FEATURE_BATTERY_STATUS)
@@ -253,7 +365,12 @@ class BaseDevice(ABC):
             if len(frame) >= 7 and frame[4] <= 100:
                 # enum: 0 discharging, 1 recharging, 2 almost full, 3 full,
                 # 4 slow recharge, 5/6 invalid/thermal error, 7 other
-                return BatteryStatus(level=frame[4], charging=1 <= frame[6] <= 4)
+                status = frame[6]
+                return BatteryStatus(
+                    level=frame[4],
+                    charging=_charge_state_from_status(status),
+                    status_text=_CHARGE_STATUS_NAMES.get(status),
+                )
 
         voltage_feature = features.get(FEATURE_BATTERY_VOLTAGE)
         if voltage_feature:
@@ -262,12 +379,12 @@ class BaseDevice(ABC):
                 millivolts = (frame[4] << 8) | frame[5]
                 flags = frame[6]
                 if 2000 <= millivolts <= 5000:
-                    external_power = bool(flags & 0x80)
-                    charging = external_power and (flags & 0x03) != 0x02
                     return BatteryStatus(
                         level=_percent_from_millivolts(millivolts),
-                        charging=charging,
+                        charging=_voltage_charge_state(flags),
                         voltage=millivolts / 1000.0,
+                        status_text="voltage only",
+                        estimated=True,
                     )
 
         logger.debug(f"{self.name}: no usable battery feature in {features}")

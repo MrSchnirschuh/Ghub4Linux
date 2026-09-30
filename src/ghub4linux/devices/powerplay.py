@@ -12,6 +12,13 @@ The pad is identified by its own PID on its own HID++ interface, **not** through
 the receiver PID ``0xC53A``: that receiver enumerates the mouse sitting on the
 pad, and registering the pad against it would hand the mouse's features to the
 pad's driver.
+
+Its LED is driven through colorLedEffects (``0x8070``), and the pad's engine is
+deliberately small: **one** zone offering only ``Disabled`` and ``FixedColor``.
+An earlier version of the UI offered Static, Breathing, Colour Cycle, Wave and
+Off regardless of what the device reported, which is why effects other than
+static and off appeared to do nothing — the fabric of that list was invented,
+not read.
 """
 
 import logging
@@ -29,6 +36,10 @@ from ..core.device import (
     DeviceType,
 )
 from ..core.hid import HIDDevice
+from ..core.rgb import (
+    EFFECT_NAMES,
+    ColorLedEffects,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,23 +49,15 @@ POWERPLAY_PID = 0x405F
 # is picked up if the pad reports it.
 POWERPLAY_2_PID = 0x40C6
 
-# colorLedEffects (0x8070) — the pad's RGB engine. The newer rgbEffects
-# (0x8071) is absent here, so the two must not be conflated.
-FEATURE_COLOR_LED_EFFECTS = 0x8070
-
-# EffectId values of the colorLedEffects engine.
-EFFECT_DISABLED = 0x00
-EFFECT_FIXED_COLOR = 0x01
-EFFECT_PULSING_BREATHING = 0x02
-EFFECT_CYCLING = 0x03
-EFFECT_COLOR_WAVE = 0x04
-
 _EFFECT_BY_NAME = {
-    "off": EFFECT_DISABLED,
-    "static": EFFECT_FIXED_COLOR,
-    "breathing": EFFECT_PULSING_BREATHING,
-    "cycle": EFFECT_CYCLING,
-    "wave": EFFECT_COLOR_WAVE,
+    "off": 0x0000,
+    "static": 0x0001,
+    "breathing": 0x0002,
+    "cycle": 0x0003,
+    "wave": 0x0004,
+    "starlight": 0x0005,
+    "press": 0x0006,
+    "ripple": 0x000B,
 }
 
 
@@ -65,28 +68,58 @@ class Powerplay(BaseDevice):
         """Initialize the POWERPLAY device."""
         super().__init__(hid_device, config)
         self._features: dict[int, int] = {}
-        self._effects_index = 0
-        self._zone_count = 0
+        self._rgb: ColorLedEffects | None = None
 
     def _init_device(self) -> None:
         """Initialize the device after connecting."""
         self._features = self.discover_features()
-        # 0x8070 is not part of DISCOVERABLE_FEATURES, so resolve it directly.
-        self._effects_index = (
-            self._connection.feature_index(FEATURE_COLOR_LED_EFFECTS) if self._connection else 0
+        index = (
+            self._connection.feature_index(0x8070)  # colorLedEffects
+            if self._connection
+            else 0
         )
-        self._capabilities = {DeviceCapability.RGB_LIGHTING} if self._effects_index else set()
-        if self._effects_index:
-            self._zone_count = self._read_zone_count()
+        if index and self._connection:
+            self._rgb = ColorLedEffects(self._connection, index)
+            self._rgb.refresh()
+        self._capabilities = {DeviceCapability.RGB_LIGHTING} if self._rgb else set()
         self._info = self.get_device_info()
         # The hardware calls this controller "Candy companion chip", which tells
         # a user nothing. Show the product name instead; the raw string stays
         # available through hidpp_device_name().
         self._config.device_name = self._info.name
-        logger.info(
-            f"Initialized {self._info.name} (zones: {self._zone_count}, "
-            f"features: {', '.join(f'0x{k:04x}' for k in sorted(self._features)) or 'none'})"
+        zones = len(self._rgb.zones) if self._rgb else 0
+        effects = (
+            ", ".join(EFFECT_NAMES.get(e, hex(e)) for e in self._rgb.supported_effect_ids())
+            if self._rgb
+            else "none"
         )
+        logger.info(f"Initialized {self._info.name} (zones: {zones}, effects: {effects})")
+
+    def supported_lighting_effects(self) -> list[str]:
+        """Effect names this pad actually offers.
+
+        The UI builds its list from this instead of a hardcoded catalogue, so it
+        cannot offer an effect the hardware will silently refuse.
+        """
+        if not self._rgb:
+            return []
+        by_id = {value: name for name, value in _EFFECT_BY_NAME.items()}
+        names: list[str] = []
+        for effect_id in self._rgb.supported_effect_ids():
+            name = by_id.get(effect_id)
+            if name is None:
+                continue
+            if name == "off":
+                # "Off" is the enable switch, not a choice in the effect list.
+                continue
+            names.append(name)
+        return names
+
+    def lighting_zones(self) -> list[str]:
+        """Human-readable names of the pad's LED zones."""
+        if not self._rgb:
+            return []
+        return [zone.location_name for zone in self._rgb.zones]
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information.
@@ -104,129 +137,76 @@ class Powerplay(BaseDevice):
             device_type=DeviceType.MOUSEPAD,
             connection_type=ConnectionType.WIRED,
             has_battery=False,
-            has_rgb=bool(self._effects_index),
+            has_rgb=bool(self._rgb),
             max_dpi=0,
             dpi_step=0,
             button_count=0,
             has_onboard_profiles=False,
         )
 
-    # ── lighting (colorLedEffects 0x8070) ────────────────────────────────────
+    # ── lighting ─────────────────────────────────────────────────────────────
     #
-    # Wire format, verified against the hardware:
-    #   fn  0 get_info             ()                              -> [zones, nv[2], ext[2]]
-    #   fn  1 get_zone_info        (zone)                          -> [zone, location, effects, persistency]
-    #   fn  2 get_zone_effect_info (zone, effect)                  -> [zone, effect, id[2], caps[2], period[2]]
-    #   fn  3 set_zone_effect      (zone, effect, params[10], persistency)
-    #   fn  8 set_sw_control       (control, events)               -> ()
-    #   fn 12 get_current_color    (zone)                          -> [zone, r, g, b]
-    #
-    # `set_zone_effect` takes the zone and the zone-local effect index followed
-    # by the colour, so the request is ``zone, effect_index, r, g, b, …``.
-    # Software control must be claimed first, otherwise the firmware owns the
-    # LED and silently discards the request. The colour is read back afterwards
-    # and the write only reported as successful if it actually landed.
-
-    def _read_zone_count(self) -> int:
-        """Return the number of LED zones (0 when unreadable)."""
-        frame = self._read_feature(self._effects_index, 0x00)
-        return frame[4] if len(frame) > 4 else 0
-
-    def _zone_effect_index(self, zone: int, effect_id: int) -> int | None:
-        """Resolve *effect_id* to its zone-local index.
-
-        Effect indexes are per zone and not fixed across devices: the index of
-        a given effect has to be looked up, never assumed.  ``get_zone_effect_info``
-        answers with ``[zone, effect_index, effect_id_hi, effect_id_lo, …]``, so
-        the ID is a big-endian u16 — comparing the high byte alone would never
-        match (FixedColor is ``0x0001``, whose high byte is 0).
-        """
-        limit = 16
-        for effect_index in range(limit):
-            frame = self._read_feature(self._effects_index, 0x02, bytes([zone, effect_index]))
-            if len(frame) < 8:
-                break
-            if (frame[6] << 8) | frame[7] == effect_id:
-                return effect_index
-        return None
+    # The pad's engine lives in core/rgb.py: it reads the zones and the effect
+    # list from the device instead of assuming them, and it claims software
+    # control before writing (the firmware discards effect writes otherwise).
 
     def get_lighting_settings(self) -> LightingSettings:
         """Read the pad's current colour from the device itself."""
         settings = super().get_lighting_settings()
-        if not self._effects_index or not self._zone_count:
+        if not self._rgb:
             return settings
-
-        frame = self._read_feature(self._effects_index, 0x0C, bytes([0x00]))
-        if len(frame) >= 8:
-            settings.effect.color.red = frame[5]
-            settings.effect.color.green = frame[6]
-            settings.effect.color.blue = frame[7]
+        color = self._rgb.get_current_color(0)
+        if color is not None:
+            settings.effect.color.red, settings.effect.color.green, settings.effect.color.blue = (
+                color
+            )
             settings.effect.effect_type = "static"
-            settings.enabled = any(frame[5:8])
+            settings.enabled = any(color)
         return settings
 
     def _set_lighting_settings(self, settings: LightingSettings) -> bool:
-        """Apply an effect to the pad's LED."""
-        if not self._effects_index or not self._zone_count:
+        """Apply an effect to the pad's LED, or turn it off."""
+        if not self._rgb:
             return False
 
-        effect = settings.effect
         if not settings.enabled:
-            effect_id = EFFECT_DISABLED
+            applied = self._rgb.set_off(0)
         else:
-            effect_id = _EFFECT_BY_NAME.get(effect.effect_type, EFFECT_FIXED_COLOR)
-
-        effect_index = self._zone_effect_index(0x00, effect_id)
-        if effect_index is None:
-            logger.error(f"{self.name}: zone 0 reports no effect for {effect_id:#04x}")
-            return False
-
-        params = bytes(
-            [
-                0x00,  # zone index
-                effect_index,
-                effect.color.red,
-                effect.color.green,
-                effect.color.blue,
-                max(0, min(100, effect.brightness)),
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-                0x00,
-            ]
-        )
-        # Claim software control, then write the effect as volatile (RAM only)
-        # so the pad's stored configuration is left untouched.
-        self._read_feature(self._effects_index, 0x08, bytes([0x01, 0x00]))
-        frame = self._read_feature(self._effects_index, 0x03, params + bytes([0x00]))
-        if not frame:
-            return False
-
-        # Do not claim success on a write the device did not take.
-        read_back = self._read_feature(self._effects_index, 0x0C, bytes([0x00]))
-        applied = len(read_back) >= 8 and (
-            read_back[5],
-            read_back[6],
-            read_back[7],
-        ) == (effect.color.red, effect.color.green, effect.color.blue)
-        if not applied:
-            logger.warning(
-                f"{self.name}: colour not applied "
-                f"({effect.color.red},{effect.color.green},{effect.color.blue})"
+            effect = settings.effect
+            effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
+            applied = self._rgb.set_effect(
+                0,
+                effect_id,
+                (effect.color.red, effect.color.green, effect.color.blue),
+                effect.brightness,
             )
-            return False
 
+        if not applied:
+            logger.warning(f"{self.name}: lighting change not applied by the device")
+            return False
         self.active_profile.lighting_settings = settings
         return True
 
     def set_zone_lighting(self, zone: str, effect: LightingEffect) -> bool:
         """Set the LED effect for a named zone."""
-        if zone not in ("primary", "logo", "0"):
+        if not self._rgb:
             return False
-        settings = LightingSettings(enabled=effect.effect_type != "off", effect=effect)
-        return self.set_lighting_settings(settings)
+        target = None
+        for candidate in self._rgb.zones:
+            if zone.lower() in (candidate.location_name.lower(), str(candidate.index)):
+                target = candidate
+                break
+        if target is None:
+            return False
+        if effect.effect_type == "off":
+            return self._rgb.set_off(target.index)
+        effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
+        return self._rgb.set_effect(
+            target.index,
+            effect_id,
+            (effect.color.red, effect.color.green, effect.color.blue),
+            effect.brightness,
+        )
 
     # ── info helpers ─────────────────────────────────────────────────────────
     def _get_firmware_version(self) -> str:

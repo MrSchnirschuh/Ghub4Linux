@@ -50,8 +50,15 @@ class DeviceRow(Gtk.ListBoxRow):
 
         battery = device.get_battery_status()
         if battery:
-            state = "Charging" if battery.charging else "On battery"
-            status_text = f"{battery.level}% • {state}"
+            # Never print a percentage the device did not report, and never
+            # claim a charge state the flags byte did not confirm.
+            level = "—" if battery.level is None else f"{battery.level}%"
+            state = {
+                True: "Charging",
+                False: "Not charging",
+                None: "Charge state unknown",
+            }[battery.charging]
+            status_text = f"{level} • {state}"
         elif device.info:
             status_text = device.info.connection_type.value.replace("_", " ").title()
         else:
@@ -60,7 +67,7 @@ class DeviceRow(Gtk.ListBoxRow):
         status_label = Gtk.Label(label=status_text)
         status_label.set_halign(Gtk.Align.START)
         status_label.add_css_class("ghub-device-meta")
-        if battery and battery.level <= 15:
+        if battery and battery.level is not None and battery.level <= 15:
             status_label.add_css_class("ghub-battery-low")
         info_box.append(status_label)
 

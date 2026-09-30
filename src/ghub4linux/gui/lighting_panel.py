@@ -47,18 +47,32 @@ class LightingPanel(Gtk.Box):
         enable_box.append(self.enable_switch)
         self.append(enable_box)
 
-        # Effect selector
+        # Effect selector.
+        #
+        # The list comes from the device, not from a catalogue: the POWERPLAY
+        # pad's engine offers only Disabled and FixedColor, so offering
+        # Breathing/Cycle/Wave here meant picking an effect that the firmware
+        # silently refused and nothing happened.
+        supported = self._supported_effects()
         effect_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         effect_label = Gtk.Label(label="Effect")
         effect_box.append(effect_label)
 
         self.effect_combo = Gtk.ComboBoxText()
-        effects = ["Static", "Breathing", "Color Cycle", "Wave", "Off"]
-        for effect in effects:
-            self.effect_combo.append_text(effect)
+        self.effect_names = supported
+        for effect in supported:
+            self.effect_combo.append_text(effect.capitalize())
         self.effect_combo.set_active(0)
+        self.effect_combo.set_hexpand(True)
         effect_box.append(self.effect_combo)
         self.append(effect_box)
+
+        if len(supported) == 1:
+            note = Gtk.Label(label=f"This device offers a single effect ({supported[0]}).")
+            note.add_css_class("dim-label")
+            note.set_halign(Gtk.Align.START)
+            note.set_wrap(True)
+            self.append(note)
 
         # Color picker
         color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -104,6 +118,24 @@ class LightingPanel(Gtk.Box):
         apply_btn.connect("clicked", self._on_apply)
         self.append(apply_btn)
 
+    def _supported_effects(self) -> list[str]:
+        """Effects the device itself reports, falling back to a sane minimum.
+
+        A driver that can enumerate its engine answers here; one that cannot
+        gets "static" only, because claiming more would offer choices that do
+        nothing.
+        """
+        getter = getattr(self.device, "supported_lighting_effects", None)
+        if callable(getter):
+            try:
+                effects = getter()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"could not read supported effects: {exc}")
+                effects = []
+            if effects:
+                return list(effects)
+        return ["static"]
+
     def _on_apply(self, _button: Gtk.Button) -> None:
         """Apply lighting settings."""
 
@@ -114,8 +146,8 @@ class LightingPanel(Gtk.Box):
             blue=int(rgba.blue * 255),
         )
 
-        effect_names = ["static", "breathing", "cycle", "wave", "off"]
-        effect_type = effect_names[self.effect_combo.get_active()]
+        index = self.effect_combo.get_active()
+        effect_type = self.effect_names[index] if 0 <= index < len(self.effect_names) else "static"
 
         effect = LightingEffect(
             effect_type=effect_type,

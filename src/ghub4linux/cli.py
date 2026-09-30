@@ -168,14 +168,13 @@ def cmd_battery(_manager: DeviceManager, device: BaseDevice, args: argparse.Name
         "level": battery.level,
         "charging": battery.charging,
         "voltage": round(battery.voltage, 3) if battery.voltage is not None else None,
+        "status": battery.status_text,
+        "estimated": battery.estimated,
     }
     if args.json:
         print(json.dumps(data))
         return
-    status = "charging" if battery.charging else "discharging"
-    print(f"Level: {data['level']}% ({status})")
-    if data["voltage"] is not None:
-        print(f"Voltage: {data['voltage']:.3f}V")
+    print(f"Level: {battery.describe()}")
 
 
 @_with_device
@@ -494,7 +493,9 @@ def cmd_daemon(manager: DeviceManager, args: argparse.Namespace) -> None:  # noq
             for device in manager.get_all_devices():
                 if device.is_connected:
                     battery = device.get_battery_status()
-                    if battery and battery.level < 20:
+                    # A device that reports no percentage must not trip a
+                    # "low battery" warning on an invented number.
+                    if battery and battery.level is not None and battery.level < 20:
                         logger.warning("Low battery: %s at %d%%", device.name, battery.level)
         except Exception as e:
             logger.error("Daemon error: %s", e)
@@ -527,9 +528,14 @@ def cmd_monitor(manager: DeviceManager, args: argparse.Namespace) -> None:
             battery = device.get_battery_status()
             if battery is None:
                 continue
-            status = "charging" if battery.charging else "discharging"
+            status = {
+                True: "charging",
+                False: "not charging",
+                None: "unknown",
+            }[battery.charging]
             voltage = f"{battery.voltage:.3f}V" if battery.voltage is not None else "N/A"
-            print(f"{device.name:40} {battery.level:3d}%     {status:12} {voltage:8}")
+            level = "  ?" if battery.level is None else f"{battery.level:3d}"
+            print(f"{device.name:40} {level}%     {status:12} {voltage:8}")
         try:
             signal.pause() if args.interval == 0 else time.sleep(args.interval)
         except InterruptedError:

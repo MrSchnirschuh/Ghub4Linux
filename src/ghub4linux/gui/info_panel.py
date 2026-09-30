@@ -71,7 +71,7 @@ class InfoPanel(Gtk.Box):
         self.append(battery_title)
 
         battery = device.get_battery_status()
-        if battery:
+        if battery and battery.level is not None:
             battery_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
             level_bar = Gtk.LevelBar()
@@ -81,13 +81,27 @@ class InfoPanel(Gtk.Box):
             level_bar.set_hexpand(True)
             battery_box.append(level_bar)
 
-            status_text = f"{battery.level}%"
-            if battery.charging:
+            # A level derived from voltage is marked as an estimate; a device
+            # that reports no percentage at all must not be shown a fake one.
+            prefix = "≈" if battery.estimated else ""
+            status_text = f"{prefix}{battery.level}%"
+            if battery.charging is True:
                 status_text += " (Charging)"
+            elif battery.charging is None:
+                status_text += " (charge state unknown)"
             battery_label = Gtk.Label(label=status_text)
             battery_box.append(battery_label)
 
             self.append(battery_box)
+        elif battery:
+            # The device answers, but reports no percentage: say so rather than
+            # inventing a number for it.
+            detail = battery.status_text or "no percentage reported"
+            no_level = Gtk.Label(label=f"Charge level not reported by this device ({detail})")
+            no_level.add_css_class("dim-label")
+            no_level.set_halign(Gtk.Align.START)
+            no_level.set_wrap(True)
+            self.append(no_level)
         else:
             no_battery = Gtk.Label(label="No battery (wired connection)")
             no_battery.add_css_class("dim-label")

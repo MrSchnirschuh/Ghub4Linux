@@ -26,6 +26,7 @@ from ..core.hidpp import (
     FEATURE_ADJUSTABLE_DPI,
     FEATURE_BATTERY_STATUS,
     FEATURE_BATTERY_VOLTAGE,
+    FEATURE_EXT_REPORT_RATE,
     FEATURE_EXTENDED_ADJUSTABLE_DPI,
     FEATURE_ONBOARD_PROFILES,
     FEATURE_REPORT_RATE,
@@ -97,7 +98,9 @@ class ProDex2(G502Device):
             caps.add(DeviceCapability.BATTERY_STATUS)
         if FEATURE_ONBOARD_PROFILES in self._features:
             caps.add(DeviceCapability.ONBOARD_PROFILES)
-        if FEATURE_REPORT_RATE in self._features:
+        # The DEX exposes the extended rate feature (0x8061); the classic
+        # ReportRate (0x8060) it does not have at all.
+        if FEATURE_EXT_REPORT_RATE in self._features or FEATURE_REPORT_RATE in self._features:
             caps.add(DeviceCapability.REPORT_RATE)
         # The PRO X 2 DEX has no RGB, so no RGB_LIGHTING capability is
         # advertised and the GUI never offers a lighting tab for it.
@@ -209,19 +212,84 @@ class ProDex2(G502Device):
         self.active_profile.lighting_settings = settings
         return False
 
-    def set_report_rate(self, rate: int) -> bool:
-        """Set polling/report rate. The PRO X 2 DEX supports up to 4000 Hz."""
-        valid_rates = [125, 250, 500, 1000, 2000, 4000]
-        if rate not in valid_rates:
-            return False
+    # ── report rate: extendedAdjustableReportRate (0x8061) ───────────────────
+    #
+    # The DEX does **not** have the older ReportRate (0x8060) that the G502
+    # uses; it exposes the extended variant, which is a different layout:
+    #
+    #   fn 0 get_device_capabilities(connection_type) -> bitmask of rates
+    #   fn 1 get_actual_report_rate_list(connection_type) -> [count, codes...]
+    #   fn 2 get_report_rate(connection_type)          -> [rate_code]
+    #   fn 3 set_report_rate(rate_code)                -> ()
+    #
+    # The rate is an **enum code**, not a number of hertz: 0=125, 1=250, 2=500,
+    # 3=1000, 4=2000, 5=4000, 6=8000 Hz. The previous implementation looked for
+    # 0x8060 (absent here, hence "report rate not supported") and would have
+    # written hertz as a big-endian u16 through fn 1 — a function that reads the
+    # list, not one that sets anything.
 
-        index = self._features.get(FEATURE_REPORT_RATE)
+    def _connection_code(self) -> int:
+        """0 = wired USB, 1 = Logitech gaming wireless."""
+        return 0 if self.info and self.info.connection_type == ConnectionType.WIRED else 1
+
+    def get_report_rate_list(self) -> list[int]:
+        """Report intervals in milliseconds, as the base API expresses them."""
+        index = self._features.get(FEATURE_EXT_REPORT_RATE)
+        if not index:
+            return []
+        frame = self._read_feature(index, 0x00, bytes([self._connection_code(), 0, 0]))
+        if len(frame) < 5:
+            return []
+        bitmask = frame[4]
+        # Bit N set means rate code N is offered; convert each code to hertz and
+        # then to the millisecond interval the caller expects (or the
+        # sub-millisecond rates as 0, which callers render as "no interval").
+        hertz_by_code = {0: 125, 1: 250, 2: 500, 3: 1000, 4: 2000, 5: 4000, 6: 8000}
+        intervals = []
+        for code, hertz in hertz_by_code.items():
+            if bitmask & (1 << code):
+                intervals.append(max(1, 1000 // hertz))
+        return sorted(set(intervals))
+
+    def get_report_rate(self) -> int | None:
+        """Active report interval in milliseconds (None when unreadable)."""
+        index = self._features.get(FEATURE_EXT_REPORT_RATE)
+        if not index:
+            return None
+        frame = self._read_feature(index, 0x02, bytes([self._connection_code(), 0, 0]))
+        if len(frame) < 5:
+            return None
+        hertz_by_code = {0: 125, 1: 250, 2: 500, 3: 1000, 4: 2000, 5: 4000, 6: 8000}
+        hertz = hertz_by_code.get(frame[4])
+        return max(1, 1000 // hertz) if hertz else None
+
+    def set_report_rate(self, rate: int) -> bool:
+        """Set the report interval, given in milliseconds or hertz."""
+        index = self._features.get(FEATURE_EXT_REPORT_RATE)
         if not index:
             return False
 
-        # ReportRate (0x8060) fn 1 takes the rate in Hz as a big-endian u16.
-        frame = self._read_feature(index, 0x01, bytes([(rate >> 8) & 0xFF, rate & 0xFF]))
-        return bool(frame)
+        hertz = rate if rate > 100 else 1000 // rate
+        code_by_hertz = {125: 0, 250: 1, 500: 2, 1000: 3, 2000: 4, 4000: 5, 8000: 6}
+        code = code_by_hertz.get(hertz)
+        if code is None:
+            logger.warning(f"{self.name}: {hertz} Hz is not a rate this device offers")
+            return False
+
+        supported = self.get_report_rate_list()
+        wanted_interval = max(1, 1000 // hertz)
+        if supported and wanted_interval not in supported:
+            logger.warning(f"{self.name}: {hertz} Hz is not supported (device offers {supported})")
+            return False
+
+        frame = self._read_feature(index, 0x03, bytes([code, 0, 0]))
+        if not frame:
+            return False
+        # Read back rather than trust the acknowledgement.
+        applied = self.get_report_rate() == wanted_interval
+        if not applied:
+            logger.warning(f"{self.name}: report rate {hertz} Hz not applied")
+        return applied
 
 
 # Device registry mapping

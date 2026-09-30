@@ -30,8 +30,22 @@ from ..core.hid import (
     HIDDevice,
 )
 from ..core.hidpp import FEATURE_REPORT_RATE
+from ..core.rgb import ColorLedEffects
 
 logger = logging.getLogger(__name__)
+
+# EffectId values of the colorLedEffects (0x8070) engine that the UI knows how to
+# offer, mapped to the effect_type strings used in the configuration model.
+_EFFECT_BY_NAME = {
+    "off": 0x0000,
+    "static": 0x0001,
+    "breathing": 0x0002,
+    "cycle": 0x0003,
+    "wave": 0x0004,
+    "starlight": 0x0005,
+    "press": 0x0006,
+    "ripple": 0x000B,
+}
 
 
 def _bcd(value: int) -> int:
@@ -75,7 +89,8 @@ class G502Device(BaseDevice):
         }
         self._dpi_feature_index: int | None = None
         self._battery_feature_index: int | None = None
-        self._rgb_feature_index: int | None = None
+        # colorLedEffects (0x8070) reader, set up in _query_features.
+        self._rgb: ColorLedEffects | None = None
         self._features: dict[int, int] = {}
 
     def _init_device(self) -> None:
@@ -154,7 +169,7 @@ class G502Device(BaseDevice):
             caps.add(DeviceCapability.ONBOARD_PROFILES)
         if FEATURE_REPORT_RATE in self._features:
             caps.add(DeviceCapability.REPORT_RATE)
-        if FEATURE_RGB_EFFECTS in self._features:
+        if 0x8070 in self._features or FEATURE_RGB_EFFECTS in self._features:
             caps.add(DeviceCapability.RGB_LIGHTING)
         self._capabilities = caps
 
@@ -168,8 +183,8 @@ class G502Device(BaseDevice):
         """
         from ..core.hidpp import (
             FEATURE_ADJUSTABLE_DPI,
-            FEATURE_RGB_EFFECTS,
         )
+        from ..core.rgb import ColorLedEffects
 
         self._features = self.discover_features()
         self._dpi_feature_index = self._features.get(FEATURE_ADJUSTABLE_DPI)
@@ -178,11 +193,17 @@ class G502Device(BaseDevice):
         self._battery_feature_index = (
             self._features.get(0x1004) or self._features.get(0x1000) or self._features.get(0x1001)
         )
-        # Only the RGBEffects feature takes an effect payload.  A device with a
-        # single logo LED exposes LEDControl (0x1300) instead, which is driven
-        # through the onboard profile and is not covered here yet — claiming it
-        # here would write effect bytes into a feature that does not expect them.
-        self._rgb_feature_index = self._features.get(FEATURE_RGB_EFFECTS)
+        # The G502 Lightspeed drives its lighting through colorLedEffects
+        # (0x8070) — *not* the newer rgbEffects (0x8071), which it does not have.
+        # Keying on 0x8071 is why the app previously showed no lighting settings
+        # for this mouse at all, despite the hardware reporting two zones and
+        # three effects for it.
+        index = self._features.get(0x8070) or self._features.get(0x8071)
+        if index and self._connection:
+            self._rgb = ColorLedEffects(self._connection, index)
+            self._rgb.refresh()
+        else:
+            self._rgb = None
 
     def get_device_info(self) -> DeviceInfo:
         """Get device information."""
@@ -348,51 +369,70 @@ class G502Device(BaseDevice):
                 values.append(raw)
         return sorted(set(values))
 
+    # ── lighting (colorLedEffects 0x8070) ────────────────────────────────────
+    #
+    # The G502 Lightspeed exposes 0x8070 with **two** zones (the logo and a
+    # second one) and three effects each. The previous implementation sent
+    # invented effect codes through function 0 and 1 of a feature it never
+    # actually resolved on this model — the write was acknowledged and changed
+    # nothing.
+
+    def supported_lighting_effects(self) -> list[str]:
+        """Effect names this mouse actually offers."""
+        if not self._rgb:
+            return []
+        by_id = {value: name for name, value in _EFFECT_BY_NAME.items()}
+        names: list[str] = []
+        for effect_id in self._rgb.supported_effect_ids():
+            name = by_id.get(effect_id)
+            if name and name != "off":
+                names.append(name)
+        return names
+
+    def lighting_zones(self) -> list[str]:
+        """Human-readable names of this mouse's LED zones."""
+        if not self._rgb:
+            return []
+        return [zone.location_name for zone in self._rgb.zones]
+
+    def get_lighting_settings(self) -> LightingSettings:
+        """Read the current colour back from the device."""
+        settings = super().get_lighting_settings()
+        if self._rgb:
+            color = self._rgb.get_current_color(0)
+            if color is not None:
+                settings.effect.color.red = color[0]
+                settings.effect.color.green = color[1]
+                settings.effect.color.blue = color[2]
+                settings.enabled = any(color)
+        return settings
+
     def _set_lighting_settings(self, settings: LightingSettings) -> bool:
-        """Set lighting settings on device."""
-        if not self._connection or self._rgb_feature_index is None:
-            # Update local config only
-            self.active_profile.lighting_settings = settings
-            return True
-
-        try:
-            if not settings.enabled:
-                # Turn off lighting
-                self._connection.send_feature_request(self._rgb_feature_index, 0x00, bytes([0x00]))
-            else:
-                # Set effect
-                effect = settings.effect
-                effect_code = self._get_effect_code(effect.effect_type)
-                color = effect.color
-
-                params = bytes(
-                    [
-                        effect_code,
-                        color.red,
-                        color.green,
-                        color.blue,
-                        effect.speed,
-                        effect.brightness,
-                    ]
-                )
-                self._connection.send_feature_request(self._rgb_feature_index, 0x01, params)
-
-            self.active_profile.lighting_settings = settings
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set lighting: {e}")
+        """Apply lighting settings to the mouse."""
+        if not self._rgb:
             return False
 
-    def _get_effect_code(self, effect_type: str) -> int:
-        """Convert effect type to device code."""
-        effects = {
-            "off": 0x00,
-            "static": 0x01,
-            "breathing": 0x02,
-            "cycle": 0x03,
-            "wave": 0x04,
-        }
-        return effects.get(effect_type, 0x01)
+        effect = settings.effect
+        color = (effect.color.red, effect.color.green, effect.color.blue)
+
+        # Apply to every zone the device reported: writing only to zone 0 would
+        # change one LED and leave the others as they were.
+        zone_indexes = [zone.index for zone in self._rgb.zones] or [0]
+        results = []
+        for zone_index in zone_indexes:
+            if not settings.enabled:
+                results.append(self._rgb.set_off(zone_index))
+            else:
+                effect_id = _EFFECT_BY_NAME.get(effect.effect_type, 0x0001)
+                results.append(
+                    self._rgb.set_effect(zone_index, effect_id, color, effect.brightness)
+                )
+
+        if not any(results):
+            logger.warning(f"{self.name}: lighting change not applied by the device")
+            return False
+        self.active_profile.lighting_settings = settings
+        return True
 
     # ── report rate (adjustableReportRate 0x8060) ────────────────────────────
     #

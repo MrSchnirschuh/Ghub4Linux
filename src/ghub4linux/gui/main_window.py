@@ -233,9 +233,16 @@ class MainWindow(Adw.ApplicationWindow):
 
         battery = device.get_battery_status()
         if battery:
-            text = f"{battery.level}%"
-            if battery.charging:
+            # State the level only when the device actually reported one; a
+            # voltage-derived estimate is marked as such.
+            if battery.level is None:
+                text = "level unknown"
+            else:
+                text = f"{'≈' if battery.estimated else ''}{battery.level}%"
+            if battery.charging is True:
                 text += " • charging"
+            elif battery.charging is None:
+                text += " • charge state unknown"
             meta = Gtk.Label(label=text)
             meta.add_css_class("ghub-device-meta")
         else:

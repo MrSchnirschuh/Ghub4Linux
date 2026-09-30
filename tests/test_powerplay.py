@@ -11,9 +11,8 @@ from ghub4linux.core.config import RGBColor
 from ghub4linux.core.device import DeviceCapability, DeviceType
 from ghub4linux.core.hid import HIDDevice
 from ghub4linux.core.hidpp import FEATURE_COLOR_LED_EFFECTS, FEATURE_RGB_EFFECTS
+from ghub4linux.core.rgb import EFFECT_NAMES
 from ghub4linux.devices.powerplay import (
-    EFFECT_DISABLED,
-    EFFECT_FIXED_COLOR,
     POWERPLAY_DEVICES,
     POWERPLAY_PID,
     Powerplay,
@@ -205,7 +204,6 @@ class TestLighting:
         assert write[0] == 0x00  # zone
         # Disabled sits at index 0 on this pad; its ID (0x0000) is not the index.
         assert write[1] == 0
-        assert EFFECT_DISABLED == 0x00
 
     def test_fixed_colour_index_is_resolved_from_the_device(self):
         pad, connection = _connected_pad()
@@ -216,7 +214,6 @@ class TestLighting:
 
         write = next(p for idx, fn, p in connection.writes if idx == 0x0B and fn == 0x03)
         assert write[1] == 1, "FixedColor lives at index 1, not at its ID 0x0001"
-        assert EFFECT_FIXED_COLOR == 0x0001
 
     def test_effect_id_is_compared_as_big_endian(self):
         """A u16 effect ID must not be matched by its high byte alone."""
@@ -260,4 +257,17 @@ class TestFeatureHandling:
         pad, _ = _connected_pad()
         assert FEATURE_COLOR_LED_EFFECTS == 0x8070
         assert FEATURE_RGB_EFFECTS == 0x8071
-        assert pad._effects_index == 0x0B
+        assert pad._rgb is not None
+        assert pad._rgb.index == 0x0B
+
+    def test_effect_ids_are_the_documented_values(self):
+        """The engine's effect IDs, not invented ones.
+
+        FixedColor is 0x0001; an earlier build mapped its own codes
+        (off=0x00, static=0x01, breathing=0x02…) through the wrong functions,
+        which is a large part of why no effect other than static did anything.
+        """
+        assert EFFECT_NAMES[0x0000] == "Disabled"
+        assert EFFECT_NAMES[0x0001] == "FixedColor"
+        assert EFFECT_NAMES[0x0004] == "ColorWave"
+        assert EFFECT_NAMES[0x000B] == "Ripple"
