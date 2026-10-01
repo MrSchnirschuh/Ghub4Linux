@@ -109,21 +109,28 @@ def _voltage_charge_state(flags: int) -> bool | None:
     * bit 3 — fast charge, bit 4 — slow charge.
     * bit 5 — charge level critical.
 
-    The G502 Lightspeed reports ``0x00`` here, which the wire format reads as
-    "no external power, therefore discharging" — while the mouse sits on a
-    PowerPlay pad with its charging LED lit.  Logitech's documented PowerPlay
-    behaviour explains the contradiction rather than resolving it: on the pad
-    the battery is deliberately held between 85% and 95%, so the pad
-    legitimately stops and resumes charging and the firmware does not always
-    surface the pad as external power.
+    ``0x00`` means "no external power present", i.e. **not charging**.  That is
+    a definite statement, not a gap in the data, and it is corroborated by the
+    voltage: measured on a G502 Lightspeed on a PowerPlay pad, the byte sat at
+    ``0x00`` with the battery at 3999 mV and then flipped to ``0x90``, at which
+    point the voltage **jumped to 4044 mV** — the charging voltage — within the
+    same second.  The flag change tracked a real change at the hardware.
 
-    Since this value cannot be reconciled with the observable hardware, it is
-    reported as unknown rather than as a discharge claim the device contradicts.
+    So this must not be softened into "unknown".  A PowerPlay pad holds the
+    battery between 85% and 95% by design and therefore stops and resumes
+    charging on its own, which means the byte legitimately alternates over time;
+    reporting the state of the *current* read is correct, and reporting "unknown"
+    hides an answer the device gave.
+
+    ``None`` is reserved for bytes that genuinely carry no answer: a hardware
+    error, or a reserved status value.
     """
     if not flags & 0x80:
-        # No external power reported.  Treat as discharging only when the byte
-        # carries no other claim; all-zero is the ambiguous case above.
-        return False if flags else CHARGING_UNKNOWN
+        # No external power reported.  A non-zero byte may still carry other
+        # claims (fast/slow charge, critical), but without bit 7 the wire format
+        # says the charge status is not valid, so only the plain "no external
+        # power" case is answered.
+        return False if flags == 0x00 else CHARGING_UNKNOWN
 
     status_bits = flags & 0x07
     if status_bits == 0x00 or flags & 0x08 or flags & 0x10:
@@ -412,6 +419,9 @@ class BaseDevice(ABC):
 
         voltage_feature = features.get(FEATURE_BATTERY_VOLTAGE)
         if voltage_feature:
+            # The current reading is used as-is: a change in the flags byte was
+            # measured to track a real change in the voltage, so the state is a
+            # fact about now rather than noise to be averaged away.
             frame = self._read_feature(voltage_feature)
             if len(frame) >= 7:
                 millivolts = (frame[4] << 8) | frame[5]

@@ -47,19 +47,19 @@ class TestVoltageFlags:
     charge, bit 4 slow charge, bit 5 critical.
     """
 
-    def test_all_zero_is_unknown_not_a_discharge_claim(self):
-        """The G502's exact value, while it demonstrably charges on the pad.
+    def test_all_zero_means_not_charging(self):
+        """0x00 is the plain "no external power" case — a definite answer.
 
-        The wire format reads 0x00 as "no external power", but the mouse's own
-        charging LED says otherwise, and PowerPlay holds the battery at 85-95%
-        by design so the pad legitimately stops charging. The byte cannot be
-        reconciled with the hardware, so it must not become a claim either way.
+        Measured alongside the voltage: at 0x00 the battery read 3999 mV, and
+        when the byte flipped to 0x90 the voltage jumped to 4044 mV in the same
+        second.  The bit tracks the hardware, so it is answered rather than
+        softened into "unknown" — see TestTheChargeFlagTracksTheHardware.
         """
-        assert _voltage_charge_state(0x00) is None
+        assert _voltage_charge_state(0x00) is False
 
-    def test_status_bits_without_external_power_still_report(self):
-        """A byte with real status bits is not the ambiguous all-zero case."""
-        assert _voltage_charge_state(0x07) is False
+    def test_status_bits_without_external_power_are_not_decoded(self):
+        """Bit 7 gates the status bits, so they cannot be read without it."""
+        assert _voltage_charge_state(0x07) is None
 
     def test_external_power_with_status_zero_is_charging(self):
         assert _voltage_charge_state(0x80) is True
@@ -166,3 +166,42 @@ class TestDescribe:
             "discharging"
             in BatteryStatus(level=50, charging=False, status_text="discharging").describe()
         )
+
+
+class TestTheChargeFlagTracksTheHardware:
+    """0x00 is a definite "not charging", not an "unknown".
+
+    Measured on a G502 Lightspeed on a PowerPlay pad, sampled once a second: the
+    byte sat at ``0x00`` with the battery at 3999 mV, then flipped to ``0x90`` —
+    and in the same second the voltage **jumped to 4044 mV**, the charging
+    voltage.  The flag change therefore tracked a real change at the hardware
+    rather than being noise, so the honest output is the state of the current
+    read.  Earlier builds softened it to "unknown", which hid an answer the
+    device gave and made the indicator look broken while the pad was working.
+
+    The pad holds the battery between 85% and 95% by design, so it really does
+    stop and resume charging on its own — both values are legitimately correct
+    at different times.
+    """
+
+    def test_no_external_power_is_a_definite_not_charging(self):
+        assert _voltage_charge_state(0x00) is False
+
+    def test_external_power_with_slow_charge_is_charging(self):
+        """0x90: external power + slow charge, exactly what a pad does."""
+        assert _voltage_charge_state(0x90) is True
+
+    def test_both_values_the_hardware_produced_are_answered(self):
+        """Neither of the two real readings may come out as unknown."""
+        assert _voltage_charge_state(0x00) is not None
+        assert _voltage_charge_state(0x90) is not None
+
+    def test_a_byte_without_bit7_and_other_claims_stays_unknown(self):
+        """Bit 7 gates the status bits, so 0x08 alone justifies no answer."""
+        assert _voltage_charge_state(0x08) is None
+
+    def test_the_rendered_text_names_the_state(self):
+        """The UI must say which of the two it is, not hedge."""
+        charging = BatteryStatus(level=81, charging=False, voltage=3.999, estimated=True)
+        assert "not charging" in charging.describe()
+        assert "unknown" not in charging.describe()
